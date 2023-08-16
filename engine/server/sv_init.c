@@ -631,8 +631,11 @@ void SV_UnspawnServer (void)	//terminate the running server.
 			q3->sv.ShutdownGame(false);
 #endif
 #ifdef Q2SERVER
-		q2->sv.ShutdownGameProgs();
-		q2->sv.Ents_Shutdown();
+		if(q2)
+		{
+			q2->sv.ShutdownGameProgs();
+			q2->sv.Ents_Shutdown();
+		}
 #endif
 #ifdef HLSERVER
 		SVHL_ShutdownGame();
@@ -1207,7 +1210,7 @@ MSV_OpenUserDatabase();
 		newgametype = GT_QUAKE3;
 #endif
 #ifdef Q2SERVER
-	else if ((sv.world.worldmodel->fromgame == fg_quake2 || sv.world.worldmodel->fromgame == fg_quake3) && sv.world.worldmodel->funcs.AreasConnected && !*pr_ssqc_progs.string && q2->sv.InitGameProgs())	//these are the rules for running a q2 server
+	else if (q2 && q2->sv.InitGame(&svs, &sv))	//these are the rules for running a q2 server
 		newgametype = GT_QUAKE2;	//we loaded the dll
 #endif
 #ifdef VM_LUA
