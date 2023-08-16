@@ -208,6 +208,10 @@
 #ifdef AVAIL_JPEGLIB
 -DLINK_JPEG
 #endif
+
+#if defined(PLUGINS) && (defined(Q2SERVER) || defined(Q2CLIENT))
+-DLINK_QUAKE2	//ask the makefile to bake the quake2 plugin into the engine itself.
+#endif
 #if defined(PLUGINS) && (defined(Q3SERVER) || defined(Q3CLIENT))
 -DLINK_QUAKE3	//ask the makefile to bake the quake3 plugin into the engine itself.
 #endif

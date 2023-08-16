@@ -31,9 +31,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 extern int			total_loading_size, current_loading_size, loading_stage;
 char *T_GetString(int num);
 
-void SVQ2_Ents_Shutdown(void);
-#define Q2EDICT_NUM(i) (q2edict_t*)((char *)ge->edicts+(i)*ge->edict_size)
-
 server_static_t	svs;				// persistant server info
 server_t		sv;					// local server
 
@@ -634,8 +631,8 @@ void SV_UnspawnServer (void)	//terminate the running server.
 			q3->sv.ShutdownGame(false);
 #endif
 #ifdef Q2SERVER
-		SVQ2_ShutdownGameProgs();
-		SVQ2_Ents_Shutdown();
+		q2->sv.ShutdownGameProgs();
+		q2->sv.Ents_Shutdown();
 #endif
 #ifdef HLSERVER
 		SVHL_ShutdownGame();
@@ -1210,7 +1207,7 @@ MSV_OpenUserDatabase();
 		newgametype = GT_QUAKE3;
 #endif
 #ifdef Q2SERVER
-	else if ((sv.world.worldmodel->fromgame == fg_quake2 || sv.world.worldmodel->fromgame == fg_quake3) && sv.world.worldmodel->funcs.AreasConnected && !*pr_ssqc_progs.string && SVQ2_InitGameProgs())	//these are the rules for running a q2 server
+	else if ((sv.world.worldmodel->fromgame == fg_quake2 || sv.world.worldmodel->fromgame == fg_quake3) && sv.world.worldmodel->funcs.AreasConnected && !*pr_ssqc_progs.string && q2->sv.InitGameProgs())	//these are the rules for running a q2 server
 		newgametype = GT_QUAKE2;	//we loaded the dll
 #endif
 #ifdef VM_LUA
@@ -1241,7 +1238,7 @@ MSV_OpenUserDatabase();
 #endif
 #ifdef Q2SERVER
 		if (newgametype != GT_QUAKE2)	//we don't want the q2 stuff anymore.
-			SVQ2_ShutdownGameProgs ();
+			q2->sv.ShutdownGameProgs();
 #endif
 #ifdef VM_Q1
 		if (newgametype != GT_Q1QVM)
@@ -1436,12 +1433,11 @@ MSV_OpenUserDatabase();
 		break;
 #ifdef Q2SERVER
 	case GT_QUAKE2:
-		SV_UpdateMaxPlayers(svq2_maxclients);
+		//TODO: SV_UpdateMaxPlayers(svq2_maxclients);
+		SV_UpdateMaxPlayers(1);
 		for (i=0 ; i<sv.allocated_client_slots ; i++)
 		{
-			q2ent = Q2EDICT_NUM(i+1);
-			q2ent->s.number = i+1;
-			svs.clients[i].q2edict = q2ent;
+			svs.clients[i].q2edict = q2->sv.UpdateClientNum(i + 1);
 		}
 		break;
 #endif
@@ -1596,7 +1592,7 @@ MSV_OpenUserDatabase();
 		break;
 #ifdef Q2SERVER
 	case GT_QUAKE2:
-		ge->SpawnEntities(svs.name, file, startspot?startspot:"");
+		q2->sv.SpawnEntities(svs.name, file, startspot?startspot:"");
 		break;
 #endif
 	case GT_QUAKE3:
@@ -1685,7 +1681,7 @@ MSV_OpenUserDatabase();
 	if (svprogfuncs)
 		SVQ1_CreateBaseline();
 #ifdef Q2SERVER
-	SVQ2_BuildBaselines();
+	q2->sv.BuildBaselines();
 #endif
 
 	SV_FlushSignon(true);

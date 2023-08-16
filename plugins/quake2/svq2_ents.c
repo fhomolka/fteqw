@@ -1,8 +1,8 @@
 #include "quakedef.h"
-
+#include "q2common.h"
 #ifndef CLIENTONLY
 
-#define Q2EDICT_NUM(i) (q2edict_t*)((char *)ge->edicts+i*ge->edict_size)
+
 
 #ifndef Q2SERVER
 void SV_WriteFrameToClient (client_t *client, sizebuf_t *msg)

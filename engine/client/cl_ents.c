@@ -6153,7 +6153,7 @@ void CL_EmitEntities (void)
 	if (cls.protocol == CP_QUAKE2)
 	{
 		CL_ClearEntityLists();
-		CLQ2_AddEntities();
+		q2->cl.AddEntities();
 		return;
 	}
 #endif

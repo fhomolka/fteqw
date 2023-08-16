@@ -379,7 +379,7 @@ typedef struct
 	float				laggedtime;	//sv.time of when this frame was sent
 } client_frame_t;
 
-#ifdef Q2SERVER
+#if 0 //Moved to plugin
 typedef struct	//merge?
 {
 	int					areabytes;
@@ -577,7 +577,7 @@ typedef struct client_s
 	union{	//save space
 		client_frame_t	*frames;	// updates can be deltad from here
 #ifdef Q2SERVER
-		q2client_frame_t	*q2frames;
+		void	*q2frames;
 #endif
 #ifdef Q3SERVER
 		void	*q3frames;
@@ -1062,7 +1062,7 @@ typedef struct server_static_s
 #define SPAWNFLAG_NOT_H2COOP			(1<<16)
 #define SPAWNFLAG_NOT_H2SINGLE			(1<<17)
 
-#if 0//ndef Q2SERVER
+//#ifndef Q2SERVER
 typedef enum multicast_e
 {
 	MULTICAST_ALL,
@@ -1070,9 +1070,15 @@ typedef enum multicast_e
 	MULTICAST_PVS,
 	MULTICAST_ALL_R,
 	MULTICAST_PHS_R,
-	MULTICAST_PVS_R
+	MULTICAST_PVS_R,
+
+	MULTICAST_ONE_SPECS,
+	MULTICAST_ONE_R_SPECS,
+	MULTICAST_INIT,
+	MULTICAST_ONE_NOSPECS,
+	MULTICAST_ONE_R_NOSPECS,
 } multicast_t;
-#endif
+//#endif
 
 
 //shared with qc
@@ -1279,19 +1285,6 @@ void SV_UpdateMaxPlayers(int newmax);
 void SV_FilterImpulseInit(void);
 qboolean SV_FilterImpulse(int imp, int level);
 
-//svq2_game.c
-qboolean SVQ2_InitGameProgs(void);
-void VARGS SVQ2_ShutdownGameProgs (void);
-void VARGS PFQ2_Configstring (int i, const char *val); //for engine cheats.
-
-//svq2_ents.c
-void SVQ2_BuildClientFrame (client_t *client);
-void SVQ2_WriteFrameToClient (client_t *client, sizebuf_t *msg);
-#ifdef Q2SERVER
-void MSGQ2_WriteDeltaEntity (q2entity_state_t *from, q2entity_state_t *to, sizebuf_t *msg, qboolean force, qboolean newentity);
-void SVQ2_BuildBaselines(void);
-#endif
-
 //
 // sv_send.c
 //
@@ -1348,7 +1341,6 @@ void SVNQ_ExecuteClientMessage (client_t *cl);
 #endif
 qboolean SV_UserInfoIsBasic(const char *infoname);	//standard message.
 void SV_ExecuteClientMessage (client_t *cl);
-void SVQ2_ExecuteClientMessage (client_t *cl);
 int SV_PMTypeForClient (client_t *cl, edict_t *ent);
 void SV_UserInit (void);
 qboolean SV_TogglePause (client_t *cl);

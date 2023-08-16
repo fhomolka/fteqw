@@ -61,7 +61,7 @@ void SV_SavegameComment (char *text, size_t textsize)
 
 	kills[0] = '\0';
 #ifdef Q2SERVER
-	if (ge)	//q2
+	if (q2)	//q2
 	{
 		kills[0] = '\0';
 	}
@@ -509,7 +509,7 @@ qboolean SV_LoadLevelCache(const char *savename, const char *level, const char *
 		SV_SpawnServer (level, startspot, false, false, 0);
 
 		World_ClearWorld(&sv.world, false);
-		if (!ge)
+		if (!q2->sv.HasGameExport())
 		{
 			Con_Printf("Incorrect gamecode type.\n");
 			return false;
@@ -578,10 +578,10 @@ qboolean SV_LoadLevelCache(const char *savename, const char *level, const char *
 			FS_FreeFile(file);
 		}
 
-		ge->ReadLevel(loc.rawname);
+		q2->sv.ReadLevel(loc.rawname);
 
 		for (i=0 ; i<100 ; i++)	//run for 10 secs to iron out a few bugs.
-			ge->RunFrame ();
+			q2->sv.RunFrame ();
 		return true;
 	}
 #endif
@@ -980,13 +980,13 @@ void SV_SaveLevelCache(const char *savedir, qboolean dontharmgame)
 		Con_TPrintf ("Saving game to %s...\n", name);
 
 #ifdef Q2SERVER
-	if (ge)
+	if (q2)
 	{
 		char	syspath[256];
 
 		if (!FS_NativePath(name, FS_GAMEONLY, syspath, sizeof(syspath)))
 			return;
-		ge->WriteLevel(syspath);
+		q2->sv.WriteLevel(syspath);
 
 		if (savedir)
 			Q_snprintfz (name, sizeof(name), "saves/%s/%s.lvx", savedir, svs.name);
@@ -1412,12 +1412,12 @@ void SV_Savegame (const char *savename, qboolean mapchange)
 
 #ifdef Q2SERVER
 	//save the player's inventory and other map-persistant state that is owned by the gamecode.
-	if (ge)
+	if (q2)
 	{
 		char syspath[256];
 		if (!FS_NativePath(va("saves/%s/game.gsv", savename), FS_GAMEONLY, syspath, sizeof(syspath)))
 			return;
-		ge->WriteGame(syspath, mapchange);
+		q2->sv.WriteGame(syspath, mapchange);
 		FS_FlushFSHashFull();
 	}
 	else
@@ -2344,9 +2344,9 @@ qboolean SV_Loadgame (const char *unsafe_savename)
 			Con_Printf("%s is inside a package and cannot be used by the quake2 gamecode.\n", name);
 		else
 		{
-			SVQ2_InitGameProgs();
-			if (ge)
-				ge->ReadGame(loc.rawname);
+			q2->sv.InitGameProgs();
+			if (q2)
+				q2->sv.ReadGame(loc.rawname);
 		}
 	}
 #endif

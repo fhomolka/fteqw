@@ -198,13 +198,16 @@ extern "C" {
 #include "../server/progdefs.h"
 #include "../server/progs.h"
 #include "../common/world.h"
-#include "../server/q2game.h"
 #include "../http/iweb.h"
 #ifdef CLIENTONLY
 #define SSV_IsSubServer() false
 #else
 #include "../server/server.h"
 #endif
+#endif
+
+#if defined(Q2CLIENT) || defined(Q2SERVER)
+#include "q2api.h"
 #endif
 
 #if defined(Q3CLIENT) || defined(Q3SERVER)

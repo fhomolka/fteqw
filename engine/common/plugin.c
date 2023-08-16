@@ -11,6 +11,11 @@
 
 #ifdef PLUGINS
 
+#if defined(Q2SERVER)||defined(Q2CLIENT)
+struct q2gamecode_s *q2;
+static struct plugin_s *q2plug;
+#endif
+
 #if defined(Q3SERVER)||defined(Q3CLIENT)
 struct q3gamecode_s *q3;
 static struct plugin_s *q3plug;
@@ -31,6 +36,7 @@ static struct plugin_s *q3plug;
 cvar_t plug_sbar = CVARD("plug_sbar", "3", "Controls whether plugins are allowed to draw the hud, rather than the engine (when allowed by csqc). This is typically used to permit the ezhud plugin without needing to bother unloading it.\n=0: never use hud plugins.\n&1: Use hud plugins in deathmatch.\n&2: Use hud plugins in singleplayer/coop.\n=3: Always use hud plugins (when loaded).");
 cvar_t plug_loaddefault = CVARD("plug_loaddefault", "1", "0: Load plugins only via explicit plug_load commands\n1: Load built-in plugins and those selected via the package manager\n2: Scan for misc plugins, loading all that can be found, but not built-ins.\n3: Scan for plugins, and then load any built-ins");
 
+extern qboolean Plug_Q2_Init(void);
 extern qboolean Plug_Q3_Init(void);
 extern qboolean Plug_Bullet_Init(void);
 extern qboolean Plug_ODE_Init(void);
@@ -50,6 +56,9 @@ static struct
 	{"GLTF", Plug_GLTF_Init},
 #endif
 
+#ifdef STATIC_Q2
+	{"quake2", Plug_Q2_Init},
+#endif
 #ifdef STATIC_Q3
 	{"quake3", Plug_Q3_Init},
 #endif
@@ -1980,20 +1989,51 @@ static void *QDECL PlugBI_GetEngineInterface(const char *interfacename, size_t s
 		{
 			MSG_BeginReading,
 			MSG_GetReadCount,
+			MSG_ReadChar,
 			MSG_ReadBits,
 			MSG_ReadByte,
 			MSG_ReadShort,
+			MSG_ReadUInt16,
 			MSG_ReadLong,
+			MSG_ReadInt64,
+			MSG_ReadUInt64,
+			//MSG_ReadSLEB128,
+			MSG_ReadULEB128,
+			MSG_ReadSignedQEX,
+			MSGSV_ReadEntity,
+			MSGCL_ReadEntity,
+			MSG_ReadBigEntity,
+			MSG_ReadFloat,
+			MSG_ReadDouble,
 			MSG_ReadData,
 			MSG_ReadString,
+			MSG_ReadCoord,
+			MSG_ReadCoordFloat,
+			MSG_ReadAngle,
+			MSG_ReadAngle16,
+			MSG_ReadSkip,
 
 			MSG_BeginWriting,
+			MSG_WriteChar,
 			MSG_WriteBits,
 			MSG_WriteByte,
 			MSG_WriteShort,
 			MSG_WriteLong,
+			MSG_WriteInt64,
+			MSG_WriteUInt64,
+			MSG_WriteULEB128,
+			MSG_WriteSignedQEX,
+			MSG_WriteEntity,
+			MSG_WriteFloat,
+			MSG_WriteDouble,
 			SZ_Write,
 			MSG_WriteString,
+			MSG_WriteCoord,
+//			MSG_WriteBigCoord,
+			MSG_WriteAngle,
+			MSG_WriteAngle8,
+			MSG_WriteAngle16,
+			MSG_WriteDir,
 
 			NET_CompareAdr,
 			NET_CompareBaseAdr,

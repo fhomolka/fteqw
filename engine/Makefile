@@ -132,6 +132,9 @@ endif
 ifeq (,$(findstring DNO_OPUS,$(FTE_CONFIG_EXTRA)))
     USE_OPUS=1
 endif
+ifneq (,$(findstring DLINK_QUAKE2,$(FTE_CONFIG_EXTRA)))
+    LINK_QUAKE2=1
+endif
 ifneq (,$(findstring DLINK_QUAKE3,$(FTE_CONFIG_EXTRA)))
     LINK_QUAKE3=1
 endif
@@ -729,7 +732,6 @@ CLIENT_OBJS = \
 	zqtp.o	\
 	cl_demo.o	\
 	cl_ents.o	\
-	clq2_ents.o	\
 	cl_input.o	\
 	in_generic.o	\
 	cl_main.o	\
@@ -871,8 +873,6 @@ SERVER_OBJS = 		\
 	sv_demo.o		\
 	net_preparse.o 	\
 	savegame.o		\
-	svq2_ents.o 	\
-	svq2_game.o 	\
 	webgen.o		\
 	ftpserver.o		\
 	httpserver.o
@@ -943,8 +943,25 @@ COMMON_OBJS = \
 	iwebiface.o		\
 	translate.o		\
 	plugin.o		\
-	q1bsp.o		\
-	q2pmove.o
+	q1bsp.o		
+
+
+ifeq (1,$(LINK_QUAKE2))
+    VPATH := $(VPATH) : $(BASE_DIR)/../plugins/quake2
+    ALL_CFLAGS+=-DSTATIC_Q2
+    COMMON_OBJS += 	\
+        clq2_ents.o	\
+        clq2_parse.o \
+    	clq2_view.o \
+    	clq2_pred.o \
+    	svq2_user.o \
+    	svq2_ents.o \
+    	svq2_game.o \
+    	svq2_phys.o\
+    	q2world.o 	\
+    	q2pmove.o 	\
+		q2common.o	
+endif
 
 ifeq (1,$(LINK_QUAKE3))
     VPATH := $(VPATH) : $(BASE_DIR)/../plugins/quake3 : $(BASE_DIR)/../plugins/quake3/botlib

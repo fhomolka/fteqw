@@ -1,13 +1,309 @@
 #include "quakedef.h"
+#include "q2common.h"
 
 #define Q2NUM_FOR_EDICT(ent) (((char *)ent - (char *)ge->edicts) / ge->edict_size)
 
-#ifndef Q2SERVER
+#define ZQ2_StrDup(s) strcpy(plugfuncs->Malloc(strlen(s)+1), s)
+
+void SZQ2_Clear (sizebuf_t *buf)
+{
+	buf->cursize = 0;
+	buf->overflowed = false;
+}
+
+/*
+================
+SV_FlushSignon
+
+Moves to the next signon buffer if needed
+This stops any chunk from getting too large, hopefully, but if the worst happens then hopefully network fragmentation will work.
+================
+*/
+void SVQ2_FlushSignon (qboolean force)
+{	//flush only when it gets too big.
+	if (sv.signon.cursize < MAX_DATAGRAM - 512)
+	{
+		if (!force || !sv.signon.cursize)
+			return;
+	}
+
+	if (sv.signon.cursize)
+	{
+		sv.signon.data[-2] = (sv.signon.cursize>>0)&0xff;
+		sv.signon.data[-1] = (sv.signon.cursize>>8)&0xff;
+		sv.used_signon_space += 2+sv.signon.cursize;
+	}
+
+	sv.signon.data = sv.signon_buffer + sv.used_signon_space+2;
+	sv.signon.maxsize = sizeof(sv.signon_buffer) - (sv.used_signon_space+2);
+	sv.signon.cursize = 0;
+	sv.signon.prim = svs.netprim;
+}
+
+void SVQ2_MulticastProtExt(vec3_t origin, multicast_t to, int dimension_mask, int with, int without)
+{
+	client_t	*client;
+	qbyte		*mask;
+	int			cluster, area1, area2;
+	int			j;
+	qboolean	reliable;
+	client_t	*oneclient = NULL, *split;
+	int seat;
+	qboolean	andspecs = false;
+	extern cvar_t sv_nopvs;
+
+	if (!sv.multicast.cursize 
+#ifdef Q2SERVER
+		&& !sv.q2multicast.cursize
+#endif
+		)
+		return;
+
+	if (to == MULTICAST_INIT)
+	{
+		//we only have one signon buffer. make sure you don't put non-identical protocols in the buffer
+		SVQ2_FlushSignon(false);
+		Imsgfuncs->WriteData(&sv.signon, sv.multicast.data, sv.multicast.cursize);
+
+		//and send to players that are already on
+		to = MULTICAST_ALL_R;
+	}
+
+//	to = MULTICAST_ALL;
+	//don't let things crash if the world model went away. can happen in broadcasts when reloading video with the map no longer available causing the server to die with the resulting broadcast messages about players dropping or gib effects appearing
+	if (sv.world.worldmodel->loadstate != MLS_LOADED || !sv.world.worldmodel->nodes)
+	{
+		switch(to)
+		{
+		case MULTICAST_PHS_R:
+		case MULTICAST_PVS_R:
+			to = MULTICAST_ALL_R;
+			break;
+		case MULTICAST_PHS:
+		case MULTICAST_PVS:
+			to = MULTICAST_ALL;
+			break;
+		default:
+			break;
+		}
+	}
+
+	{
+		reliable = false;
+		area1=-1;
+		area2=-1;
+
+		switch (to)
+		{
+		case MULTICAST_ALL_R:
+			reliable = true;	// intentional fallthrough
+		case MULTICAST_ALL:
+			mask = NULL;
+			break;
+
+		case MULTICAST_PHS_R:
+			reliable = true;	// intentional fallthrough
+		case MULTICAST_PHS:
+			if (!sv.world.worldmodel->phs || sv_nopvs.ival)	/*broadcast if no pvs*/
+				mask = NULL;
+			else
+			{
+				cluster = sv.world.worldmodel->funcs.ClusterForPoint(sv.world.worldmodel, origin, &area1);
+				if (cluster >= 0)
+					mask = sv.world.worldmodel->funcs.ClusterPHS(sv.world.worldmodel, cluster, NULL);
+				else
+					mask = NULL;
+			}
+			break;
+
+		case MULTICAST_PVS_R:
+			reliable = true;	// intentional fallthrough
+		case MULTICAST_PVS:
+			if (sv_nopvs.ival)
+				mask = NULL;
+			else
+			{
+				cluster = sv.world.worldmodel->funcs.ClusterForPoint(sv.world.worldmodel, origin, &area1);
+				if (cluster >= 0)
+					mask = sv.world.worldmodel->funcs.ClusterPVS(sv.world.worldmodel, cluster, NULL, PVM_FAST);
+				else
+					mask = NULL;
+			}
+			break;
+
+		case MULTICAST_ONE_R_NOSPECS:
+		case MULTICAST_ONE_R_SPECS:
+			reliable = true;
+		case MULTICAST_ONE_NOSPECS:
+		case MULTICAST_ONE_SPECS:
+			oneclient = NULL;
+			mask = NULL;
+			andspecs = (to==MULTICAST_ONE_R_SPECS||to==MULTICAST_ONE_SPECS);
+			break;
+
+		default:
+			mask = NULL;
+			SV_Error ("SVQ2_Multicast: bad to:%i", to);
+		}
+
+		// send the data to all relevent clients
+		for (j = 0, client = svs.clients; j < sv.allocated_client_slots; j++, client++)
+		{
+			if (client->state != cs_spawned)
+				continue;
+
+			if (client->controller)
+				continue;
+
+			for (split = client, seat = 0; split; split = split->controlled, seat++)
+			{
+				//if (split->protocol == SCP_QUAKEWORLD)
+				{
+					if (split->fteprotocolextensions & without)
+					{
+			//			Con_Printf ("Version supressed multicast - without pext\n");
+						continue;
+					}
+					if (!(split->fteprotocolextensions & with) && with)
+					{
+			//			Con_Printf ("Version supressed multicast - with pext\n");
+						continue;
+					}
+				}
+
+				if (split->penalties & BAN_BLIND)
+					continue;
+
+				if (oneclient)
+				{
+					if (oneclient != split)
+					{
+						if (andspecs && split->spectator && split->spec_track >= 0 && oneclient == &svs.clients[split->spec_track])
+							;
+						else
+							continue;
+					}
+				}
+				else
+				{
+					vec3_t pos;
+					if (ge)
+						VectorCopy(split->q2edict->s.origin, pos);
+					else
+						continue;	//no idea where the player is...
+
+					if (!mask)	//no pvs? broadcast.
+						break;
+
+					if (to == MULTICAST_PHS_R || to == MULTICAST_PHS)
+					{	//always in range if within 1024 units (consistent with quakeworld).
+						vec3_t delta;
+						VectorSubtract(origin, pos, delta);
+						if (DotProduct(delta, delta) <= 1024*1024)
+							break;
+					}
+
+					cluster = sv.world.worldmodel->funcs.ClusterForPoint (sv.world.worldmodel, pos, &area2);
+					if (cluster>= 0 && (!(mask[cluster>>3] & (1<<(cluster&7)) ) ||
+						(sv.world.worldmodel->funcs.AreasConnected && !sv.world.worldmodel->funcs.AreasConnected (sv.world.worldmodel, area1, area2))))
+					{
+		//				Con_Printf ("PVS supressed multicast\n");
+						continue;
+					}
+				}
+				break;
+			}
+			if (!split)
+				continue;
+
+			switch (client->protocol)
+			{
+			case SCP_BAD:
+				continue;	//a bot.
+			default:
+				//SV_Error("multicast: Client is using a bad protocol");
+				NYI("SCP_BAD: multicast: Client is using a bad protocol");
+			case SCP_QUAKE2:
+				if (reliable)
+				{
+					ClientReliableCheckBlock(client, sv.q2multicast.cursize);
+					ClientReliableWrite_SZ(client, sv.q2multicast.data, sv.q2multicast.cursize);
+				}
+				else
+					Imsgfuncs->WriteData (&client->datagram, sv.q2multicast.data, sv.q2multicast.cursize);
+				break;
+			}
+		}
+	}
+
+#if 0 //#ifdef MVD_RECORDING
+	if (sv.mvdrecording && ((demo.recorder.fteprotocolextensions & with) == with) && !(demo.recorder.fteprotocolextensions & without))
+	{
+		sizebuf_t *msg;
+
+		switch(to)
+		{
+		//mvds have no idea where the receiver's camera will be.
+		//as such, they cannot have any support for pvs/phs
+		case MULTICAST_INIT:
+		default:
+		case MULTICAST_ALL_R:
+		case MULTICAST_PHS_R:
+		case MULTICAST_PVS_R:
+			msg = MVDWrite_Begin(dem_all, 0, sv.multicast.cursize);
+			break;
+		case MULTICAST_ALL:
+		case MULTICAST_PHS:
+		case MULTICAST_PVS:
+			msg = &demo.datagram;
+			break;
+
+		case MULTICAST_ONE_R_NOSPECS:
+		case MULTICAST_ONE_NOSPECS:
+			msg = &demo.datagram;
+			sv.multicast.cursize = 0;
+			break;
+
+		//mvds are all reliables really.
+		case MULTICAST_ONE_R_SPECS:
+		case MULTICAST_ONE_SPECS:
+			{
+				int pnum;
+				if (svprogfuncs)
+				{
+					edict_t *ent = PROG_TO_EDICT(svprogfuncs, pr_global_struct->msg_entity);
+					pnum = NUM_FOR_EDICT(svprogfuncs, ent) - 1;
+				}
+				else
+				{
+					pnum = 0;	//FIXME
+					Con_Printf("SV_MulticastProtExt: unsupported unicast\n");
+				}
+				msg = MVDWrite_Begin(dem_single, pnum, sv.multicast.cursize);
+			}
+			break;
+		}
+		Imsgfuncs->WriteData(msg, sv.multicast.data, sv.multicast.cursize);
+	}
+#endif
+
+#ifdef Q2SERVER
+	SZ_Clear (&sv.q2multicast);
+#endif
+	SZ_Clear (&sv.multicast);
+}
+
+void VARGS SVQ2_Multicast (vec3_t origin, multicast_t to)
+{
+	SVQ2_MulticastProtExt(origin, to, FULLDIMENSIONMASK, 0, 0);
+}
+
+/*#ifndef Q2SERVER
 qboolean SVQ2_InitGameProgs(void)
 {
 	return false;
 }
-#else
+#else*/
 game_export_t	*ge;
 int svq2_maxclients;
 
@@ -15,7 +311,7 @@ dllhandle_t *q2gamedll;
 void SVQ2_UnloadGame (void)
 {
 	if (q2gamedll)
-		Sys_CloseLibrary(q2gamedll);
+		plugfuncs->CloseDLL(q2gamedll);
 	q2gamedll = NULL;
 }
 void *SVQ2_GetGameAPI (void *parms)
@@ -103,7 +399,7 @@ void *SVQ2_GetGameAPI (void *parms)
 				Q_snprintfz(name, sizeof(name), "%s%s", syspath, gamename[o]);
 			}
 
-			q2gamedll = Sys_LoadLibrary(name, funcs);
+			q2gamedll = plugfuncs->LoadDLL(name, funcs);
 			if (q2gamedll)
 			{
 				ret = GetGameAPI(parms);
@@ -112,7 +408,7 @@ void *SVQ2_GetGameAPI (void *parms)
 					return ret;
 				}
 
-				Sys_CloseLibrary(q2gamedll);
+				plugfuncs->CloseDLL(q2gamedll);
 				q2gamedll = 0;
 			}
 		}
@@ -121,7 +417,7 @@ void *SVQ2_GetGameAPI (void *parms)
 #ifdef _WIN64
 	//if we found 32bit q2 gamecode that cannot be loaded, print out a warning about it.
 	//this should make it a little obvious when people try using 64bit builds to run q2.
-	if (COM_FCheckExists("gamex86.dll"))
+	if (FCheckExists("gamex86.dll"))
 		Con_Printf(CON_ERROR "WARNING: 32bit q2 gamecode found, but it cannot be used in a 64bit process.\nIf you wish to run this q2 mod, you will need to use a 32bit engine build.\n");
 #endif
 
@@ -164,18 +460,18 @@ static void VARGS PFQ2_Unicast (q2edict_t *ent, qboolean reliable)
 
 		//svcq2_playerinfo is not normally valid except within the svc_frame message.
 		//this means its 'free' to repurpose for things like splitscreen. woot.
-		MSG_WriteShort(&sv.q2multicast, 0);
+		Imsgfuncs->WriteShort(&sv.q2multicast, 0);
 		memmove(sv.q2multicast.data+2, sv.q2multicast.data, sv.q2multicast.cursize-2);
 		sv.q2multicast.data[0] = svcq2_playerinfo;
 		sv.q2multicast.data[1] = p;
 	}
 
 	if (reliable)
-		SZ_Write (&client->netchan.message, sv.q2multicast.data, sv.q2multicast.cursize);
+		Imsgfuncs->WriteData(&client->netchan.message, sv.q2multicast.data, sv.q2multicast.cursize);
 	else
-		SZ_Write (&client->datagram, sv.q2multicast.data, sv.q2multicast.cursize);
+		Imsgfuncs->WriteData (&client->datagram, sv.q2multicast.data, sv.q2multicast.cursize);
 
-	SZ_Clear (&sv.q2multicast);
+	SZQ2_Clear (&sv.q2multicast);
 }
 
 
@@ -217,13 +513,13 @@ static void VARGS PFQ2_cprintf (q2edict_t *ent, int level, const char *fmt, ...)
 		n = Q2NUM_FOR_EDICT(ent);
 		if (n < 1 || n > svs.allocated_client_slots)
 		{
-			Sys_Error ("cprintf to a non-client");
+			plugfuncs->Error ("cprintf to a non-client");
 			return;
 		}
 		
 		if (svs.clients[n-1].state < cs_connected)
 		{
-			Sys_Error ("cprintf to a disconnected client");
+			plugfuncs->Error ("cprintf to a disconnected client");
 			return;
 		}
 	}
@@ -263,8 +559,8 @@ static void VARGS PFQ2_centerprintf (q2edict_t *ent, const char *fmt, ...)
 	vsprintf (msg, fmt, argptr);
 	va_end (argptr);
 
-	MSG_WriteByte (&sv.q2multicast,svcq2_centerprint);
-	MSG_WriteString (&sv.q2multicast,msg);
+	Imsgfuncs->WriteByte (&sv.q2multicast,svcq2_centerprint);
+	Imsgfuncs->WriteString (&sv.q2multicast,msg);
 	PFQ2_Unicast (ent, true);
 }
 
@@ -297,25 +593,25 @@ PF_Configstring
 void VARGS PFQ2_Configstring (int i, const char *val)
 {
 	if (i < 0 || i >= Q2MAX_CONFIGSTRINGS)
-		Sys_Error ("configstring: bad index %i\n", i);
+		plugfuncs->Error ("configstring: bad index %i\n", i);
 
 	if (!val)
 		val = "";
 
-	Z_Free((char*)sv.strings.configstring[i]);
-	sv.strings.configstring[i] = Z_StrDup(val);
+	plugfuncs->Free((char*)sv.strings.configstring[i]);
+	sv.strings.configstring[i] = ZQ2_StrDup(val);
 
 	if (i == Q2CS_NAME)
 		Q_strncpyz(sv.mapname, val, sizeof(sv.mapname));
 
 	if (sv.state != ss_loading)
 	{	// send the update to everyone
-		SZ_Clear (&sv.q2multicast);
-		MSG_WriteChar (&sv.q2multicast, svcq2_configstring);
-		MSG_WriteShort (&sv.q2multicast, i);
-		MSG_WriteString (&sv.q2multicast, val);
+		SZQ2_Clear (&sv.q2multicast);
+		Imsgfuncs->WriteChar (&sv.q2multicast, svcq2_configstring);
+		Imsgfuncs->WriteShort (&sv.q2multicast, i);
+		Imsgfuncs->WriteString (&sv.q2multicast, val);
 
-		SV_Multicast (vec3_origin, MULTICAST_ALL_R);
+		SVQ2_Multicast (vec3_origin, MULTICAST_ALL_R);
 	}
 }
 
@@ -365,14 +661,14 @@ static int SVQ2_FindIndex (const char *name, int start, int max, int overflowtyp
 				strings = overflowstrings[i];
 				if (!strings || !*strings)
 				{
-					overflowstrings[i] = Z_StrDup(name);
+					overflowstrings[i] = ZQ2_StrDup(name);
 					if (sv.state != ss_loading)
 					{
-						SZ_Clear (&sv.q2multicast);
-						MSG_WriteChar (&sv.q2multicast, svcq2_configstring);
-						MSG_WriteShort (&sv.q2multicast, start+i);
-						MSG_WriteString (&sv.q2multicast, name);
-						SV_Multicast (vec3_origin, MULTICAST_ALL_R);
+						SZQ2_Clear (&sv.q2multicast);
+						Imsgfuncs->WriteChar (&sv.q2multicast, svcq2_configstring);
+						Imsgfuncs->WriteShort (&sv.q2multicast, start+i);
+						Imsgfuncs->WriteString (&sv.q2multicast, name);
+						SVQ2_Multicast (vec3_origin, MULTICAST_ALL_R);
 					}
 					return i;
 				}
@@ -380,7 +676,7 @@ static int SVQ2_FindIndex (const char *name, int start, int max, int overflowtyp
 					return i;
 			}
 		}
-		Sys_Error ("*Index: overflow");
+		plugfuncs->Error ("*Index: overflow");
 	}
 
 	PFQ2_Configstring(start + i, name);
@@ -432,7 +728,8 @@ static void VARGS PFQ2_setmodel (q2edict_t *ent, const char *name)
 // if it is an inline model, get the size information for it
 	if (name[0] == '*')
 	{
-		mod = Mod_FindName (Mod_FixName(name, sv.modelname));
+		//mod = Mod_FindName (Mod_FixName(name, sv.modelname));
+		Imodelfuncs->BeginSubmodelLoad(Iworldfuncs->FixName(name, sv.modelname));
 		if (mod->loadstate == MLS_LOADING)
 			COM_WorkerPartialSync(mod, &mod->loadstate, MLS_LOADING);	//wait for it if needed
 		VectorCopy (mod->mins, ent->mins);
@@ -453,18 +750,18 @@ static qboolean	CMQ2_Q1BSP_SetAreaPortalState (int portalnum, qboolean open)
 	return true;
 }*/
 
-static void VARGS PFQ2_WriteChar (int c) {MSG_WriteChar (&sv.q2multicast, c & 0xff);}
-static void VARGS PFQ2_WriteByte (int c) {MSG_WriteByte (&sv.q2multicast, c & 0xff);}
-static void VARGS PFQ2_WriteShort (int c) {MSG_WriteShort (&sv.q2multicast, c & 0xffff);}
-static void VARGS PFQ2_WriteLong (int c) {MSG_WriteLong (&sv.q2multicast, c);}
-static void VARGS PFQ2_WriteFloat (float f) {MSG_WriteFloat (&sv.q2multicast, f);}
-static void VARGS PFQ2_WriteString (const char *s) {MSG_WriteString (&sv.q2multicast, s);}
-static void VARGS PFQ2_WriteAngle (float f) {MSG_WriteAngle (&sv.q2multicast, f);}
-static void VARGS PFQ2_WritePos (vec3_t pos) {	MSG_WriteCoord (&sv.q2multicast, pos[0]);
-									MSG_WriteCoord (&sv.q2multicast, pos[1]);
-									MSG_WriteCoord (&sv.q2multicast, pos[2]);
+static void VARGS PFQ2_WriteChar (int c) {Imsgfuncs->WriteChar (&sv.q2multicast, c & 0xff);}
+static void VARGS PFQ2_WriteByte (int c) {Imsgfuncs->WriteByte (&sv.q2multicast, c & 0xff);}
+static void VARGS PFQ2_WriteShort (int c) {Imsgfuncs->WriteShort (&sv.q2multicast, c & 0xffff);}
+static void VARGS PFQ2_WriteLong (int c) {Imsgfuncs->WriteLong (&sv.q2multicast, c);}
+static void VARGS PFQ2_WriteFloat (float f) {Imsgfuncs->WriteFloat (&sv.q2multicast, f);}
+static void VARGS PFQ2_WriteString (const char *s) {Imsgfuncs->WriteString (&sv.q2multicast, s);}
+static void VARGS PFQ2_WriteAngle (float f) {Imsgfuncs->WriteAngle (&sv.q2multicast, f);}
+static void VARGS PFQ2_WritePos (vec3_t pos) {	Imsgfuncs->WriteCoord (&sv.q2multicast, pos[0]);
+									Imsgfuncs->WriteCoord (&sv.q2multicast, pos[1]);
+									Imsgfuncs->WriteCoord (&sv.q2multicast, pos[2]);
 								}
-static void VARGS PFQ2_WriteDir (vec3_t dir)	{MSG_WriteDir (&sv.q2multicast, dir);}
+static void VARGS PFQ2_WriteDir (vec3_t dir)	{Imsgfuncs->WriteDir (&sv.q2multicast, dir);}
 
 /*
 =================
@@ -548,16 +845,16 @@ static void VARGS SVQ2_StartSound (vec3_t origin, q2edict_t *entity, int channel
 	unsigned int needext = 0;
 
 	if (volume < 0 || volume > 1.0)
-		Sys_Error ("SV_StartSound: volume = %f", volume);
+		plugfuncs->Error ("SV_StartSound: volume = %f", volume);
 
 	if (attenuation < 0 || attenuation > 4)
-		Sys_Error ("SV_StartSound: attenuation = %f", attenuation);
+		plugfuncs->Error ("SV_StartSound: attenuation = %f", attenuation);
 
 //	if (channel < 0 || channel > 15)
 //		Sys_Error ("SV_StartSound: channel = %i", channel);
 
 	if (timeofs < 0 || timeofs > 0.255)
-		Sys_Error ("SV_StartSound: timeofs = %f", timeofs);
+		plugfuncs->Error ("SV_StartSound: timeofs = %f", timeofs);
 
 	ent = Q2NUM_FOR_EDICT(entity);
 
@@ -618,36 +915,36 @@ static void VARGS SVQ2_StartSound (vec3_t origin, q2edict_t *entity, int channel
 		}
 	}
 
-	MSG_WriteByte (&sv.q2multicast, svcq2_sound);
-	MSG_WriteByte (&sv.q2multicast, flags);
+	Imsgfuncs->WriteByte (&sv.q2multicast, svcq2_sound);
+	Imsgfuncs->WriteByte (&sv.q2multicast, flags);
 	if (flags & Q2SND_LARGEIDX)
-		MSG_WriteShort (&sv.q2multicast, soundindex);
+		Imsgfuncs->WriteShort (&sv.q2multicast, soundindex);
 	else
-		MSG_WriteByte (&sv.q2multicast, soundindex);
+		Imsgfuncs->WriteByte (&sv.q2multicast, soundindex);
 
 	if (flags & Q2SND_VOLUME)
-		MSG_WriteByte (&sv.q2multicast, volume*255);
+		Imsgfuncs->WriteByte (&sv.q2multicast, volume*255);
 	if (flags & Q2SND_ATTENUATION)
-		MSG_WriteByte (&sv.q2multicast, attenuation*64);
+		Imsgfuncs->WriteByte (&sv.q2multicast, attenuation*64);
 	if (flags & Q2SND_OFFSET)
-		MSG_WriteByte (&sv.q2multicast, timeofs*1000);
+		Imsgfuncs->WriteByte (&sv.q2multicast, timeofs*1000);
 
 	if (flags & Q2SND_ENT)
-		MSG_WriteShort (&sv.q2multicast, sendchan);
+		Imsgfuncs->WriteShort (&sv.q2multicast, sendchan);
 
 	if (flags & Q2SND_POS)
 	{
 		if (flags & Q2SND_LARGEPOS)
 		{
-			MSG_WriteFloat (&sv.q2multicast, origin[0]);
-			MSG_WriteFloat (&sv.q2multicast, origin[1]);
-			MSG_WriteFloat (&sv.q2multicast, origin[2]);
+			Imsgfuncs->WriteFloat (&sv.q2multicast, origin[0]);
+			Imsgfuncs->WriteFloat (&sv.q2multicast, origin[1]);
+			Imsgfuncs->WriteFloat (&sv.q2multicast, origin[2]);
 		}
 		else
 		{
-			MSG_WriteCoord (&sv.q2multicast, origin[0]);
-			MSG_WriteCoord (&sv.q2multicast, origin[1]);
-			MSG_WriteCoord (&sv.q2multicast, origin[2]);
+			Imsgfuncs->WriteCoord (&sv.q2multicast, origin[0]);
+			Imsgfuncs->WriteCoord (&sv.q2multicast, origin[1]);
+			Imsgfuncs->WriteCoord (&sv.q2multicast, origin[2]);
 		}
 	}
 
@@ -657,9 +954,9 @@ static void VARGS SVQ2_StartSound (vec3_t origin, q2edict_t *entity, int channel
 		use_phs = false;
 
 	if (channel & Q2CHAN_RELIABLE)
-		SV_MulticastProtExt(origin, use_phs?MULTICAST_PHS_R:MULTICAST_ALL_R, FULLDIMENSIONMASK, needext, 0);
+		SVQ2_MulticastProtExt(origin, use_phs?MULTICAST_PHS_R:MULTICAST_ALL_R, FULLDIMENSIONMASK, needext, 0);
 	else
-		SV_MulticastProtExt(origin, use_phs?MULTICAST_PHS:MULTICAST_ALL, FULLDIMENSIONMASK, needext, 0);
+		SVQ2_MulticastProtExt(origin, use_phs?MULTICAST_PHS:MULTICAST_ALL, FULLDIMENSIONMASK, needext, 0);
 }  
 
 static void VARGS PFQ2_StartSound (q2edict_t *entity, int channel, int sound_num, float volume,
@@ -708,7 +1005,7 @@ static cvar_t *VARGS Q2Cvar_Get (const char *var_name, const char *value, int fl
 	if (!strcmp(var_name, "gamedir"))
 		var_name = "fs_gamedir";
 
-	var = Cvar_Get(var_name, value, flags, "Quake2 game variables");
+	var = cvarfuncs->GetNVFDG(var_name, value, flags, NULL, "Quake2 game variables");
 	if (!var)
 	{
 		Con_Printf("Q2Cvar_Get: variable %s not creatable\n", var_name);
@@ -721,30 +1018,36 @@ static cvar_t *VARGS Q2Cvar_Get (const char *var_name, const char *value, int fl
 	if (flags != var->flags)
 	{
 		var->flags = flags;
-		Cvar_Set(var, var->string);
+		cvarfuncs->SetString(var->name, var->string);
 	}
 	return var;
 }
 
 cvar_t *VARGS Q2Cvar_Set (const char *var_name, const char *value)
 {
-	cvar_t *var = Cvar_FindVar(var_name);
+	//cvar_t *var = Cvar_FindVar(var_name);
+	cvar_t *var = cvarfuncs->GetNVFDG(var_name, NULL, 0, NULL, NULL);
 	if (!var)
 	{
 		Con_Printf("Q2Cvar_Set: variable %s not found\n", var_name);
 		return NULL;
 	}
-	return Cvar_Set(var, value);
+	cvarfuncs->SetString(var->name, value);
+	return var;
+	//return Cvar_Set(var, value);
 }
 cvar_t *VARGS Q2Cvar_ForceSet (const char *var_name, const char *value)
 {
-	cvar_t *var = Cvar_FindVar(var_name);
+	//cvar_t *var = Cvar_FindVar(var_name);
+	cvar_t *var = cvarfuncs->GetNVFDG(var_name, NULL, 0, NULL, NULL);
 	if (!var)
 	{
 		Con_Printf("Q2Cvar_Set: variable %s not found\n", var_name);
 		return NULL;
 	}
-	return Cvar_ForceSet(var, value);
+	cvarfuncs->ForceSetString(var->name, value);
+	return var;
+	//return Cvar_ForceSet(var, value);
 }
 
 //==============================================
@@ -757,7 +1060,8 @@ Called when either the entire server is being killed, or
 it is changing to a different game directory.
 ===============
 */
-void VARGS SVQ2_ShutdownGameProgs (void)
+
+void SVQ2_ShutdownGameProgs (void)
 {
 	if (!ge)
 		return;
@@ -768,7 +1072,8 @@ void VARGS SVQ2_ShutdownGameProgs (void)
 
 static void VARGS AddCommandString(const char *command)
 {
-	Cbuf_AddText(command, RESTRICT_LOCAL);
+	cmdfuncs->AddText(command, RESTRICT_LOCAL);
+	//Cbuf_AddText(command, RESTRICT_LOCAL);
 }
 
 /*
@@ -836,7 +1141,7 @@ qboolean SVQ2_InitGameProgs(void)
 	}
 
 	// calc the imports. 
-	import.multicast			= SV_Multicast;
+	import.multicast			= SVQ2_Multicast;
 	import.unicast				= PFQ2_Unicast;
 	import.bprintf				= SV_BroadcastPrintf;
 	import.dprintf				= PFQ2_dprintf;
@@ -909,14 +1214,14 @@ qboolean SVQ2_InitGameProgs(void)
 	if (cl_splitscreen.ival)
 	{
 		if (!deathmatch.value && !coop.value)
-			Cvar_Set(&coop, "1");	//force coop, for coop rules. we get spawn spot problems otherwise.
+			cvarfuncs->SetString("coop", "1");	//force coop, for coop rules. we get spawn spot problems otherwise.
 		svq2_maxclients = max(svq2_maxclients, MAX_SPLITS);
 	}
 #endif
 	if (svq2_maxclients > MAX_CLIENTS)
 		svq2_maxclients = MAX_CLIENTS;
 	if (svq2_maxclients != maxclients.value)
-		Cvar_SetValue(&maxclients, svq2_maxclients);
+		cvarfuncs->SetFloat("maxclients", svq2_maxclients);
 
 	maxclients.flags |= CVAR_MAPLATCH;
 	deathmatch.flags |= CVAR_MAPLATCH;
@@ -927,4 +1232,4 @@ qboolean SVQ2_InitGameProgs(void)
 	return true;
 }
 
-#endif
+//#endif

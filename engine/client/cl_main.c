@@ -4490,7 +4490,7 @@ void CL_ReadPacket(void)
 	{
 		MSG_BeginReading (&net_message, cls.netchan.netprim);
 		cls.netchan.last_received = realtime;
-		CLQ2_ParseServerMessage ();
+		q2->cl.ParseServerMessage ();
 		return;
 	}
 #endif
@@ -4565,7 +4565,7 @@ void CL_ReadPacket(void)
 #ifdef Q2CLIENT
 		if (!Netchan_Process(&cls.netchan))
 			return;		// wasn't accepted for some reason
-		CLQ2_ParseServerMessage ();
+		q2->cl.ParseServerMessage ();
 		break;
 #endif
 	case CP_QUAKE3:

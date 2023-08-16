@@ -2606,7 +2606,7 @@ qboolean SV_Physics (void)
 			{
 #ifdef Q2SERVER
 			case GT_QUAKE2:
-				ge->RunFrame();
+				q2->sv.RunFrame();
 				break;
 #endif
 #ifdef Q3SERVER

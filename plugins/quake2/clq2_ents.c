@@ -1,8 +1,9 @@
+#include "q2common.h"
 #include "quakedef.h"
-#include "particles.h"
+//#include "particles.h"
 
 #ifdef Q2CLIENT
-#include "shader.h"
+//#include "shader.h"
 
 //q2pro's framerate scaling runs the entire server at a higher rate (including gamecode).
 //this allows lower latency on player movements without breaking things too much
@@ -99,7 +100,7 @@ typedef struct q2centity_s
 
 static void Q2S_StartSound(vec3_t origin, int entnum, int entchannel, sfx_t *sfx, float fvol, float attenuation, float delay)
 {
-	S_StartSound(entnum, entchannel, sfx, origin, NULL, fvol, attenuation, -delay, 0, 0);
+	Iaudiofuncs->StartSound(entnum, entchannel, sfx, origin, NULL, fvol, attenuation, -delay, 0, 0);
 }
 sfx_t *S_PrecacheSexedSound(int entnum, const char *soundname)
 {
@@ -114,14 +115,14 @@ sfx_t *S_PrecacheSexedSound(int entnum, const char *soundname)
 				*skin = '\0';
 			if (*model)
 			{
-				sfx_t *sfx = S_PrecacheSound(va("players/%s/%s", model, soundname+1));
+				sfx_t *sfx = Iaudiofuncs->PrecacheSound(va("players/%s/%s", model, soundname+1));
 				if (sfx && sfx->loadstate != SLS_FAILED)	//warning: the sound might still be loading (and later fail).
 					return sfx;
 			}
 		}
-		return S_PrecacheSound(va("players/male/%s", soundname+1));
+		return Iaudiofuncs->PrecacheSound(va("players/male/%s", soundname+1));
 	}
-	return S_PrecacheSound(soundname);
+	return Iaudiofuncs->PrecacheSound(soundname);
 }
 
 
@@ -1996,6 +1997,8 @@ static void CLQ2_AddPacketEntities (q2frame_t *frame)
 				ent.angles[i] = LerpAngle (a2, a1, cl.lerpfrac);
 			}
 		}
+		cvar_t r_meshpitch = cvarfuncs->GetNVFDG("r_meshpitch", NULL, 0, NULL, NULL);
+		cvar_t r_meshroll = cvarfuncs->GetNVFDG("r_meshroll", NULL, 0, NULL, NULL);
 
 		ent.angles[0]*=r_meshpitch.value;	//q2 has it fixed. consistency...
 		ent.angles[2]*=r_meshroll.value;	//h2 doesn't. consistency...

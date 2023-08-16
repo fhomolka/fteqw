@@ -749,10 +749,12 @@ void SV_MulticastProtExt(vec3_t origin, multicast_t to, int dimension_mask, int 
 							continue;
 						VectorAdd(split->edict->v->origin, split->edict->v->view_ofs, pos);
 					}
+/* NOTE(fhomolka): Moved to plugin
 #ifdef Q2SERVER
 					else if (ge)
 						VectorCopy(split->q2edict->s.origin, pos);
 #endif
+*/
 					else
 						continue;	//no idea where the player is...
 
@@ -2657,11 +2659,11 @@ qboolean SV_SendClientDatagram (client_t *client)
 #ifdef Q2SERVER
 		if (ISQ2CLIENT(client))
 		{
-			SVQ2_BuildClientFrame (client);
+			q2->sv.BuildClientFrame (client);
 
 			// send over all the relevant entity_state_t
 			// and the player_state_t
-			SVQ2_WriteFrameToClient (client, &msg);
+			q2->sv.WriteFrameToClient (client, &msg);
 		}
 		else
 #endif

@@ -19,7 +19,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 // game.h -- game dll information visible to server
+#include "clq2defs.h"
 
+
+#if 0
 typedef enum multicast_e
 {
 	MULTICAST_ALL,
@@ -35,6 +38,7 @@ typedef enum multicast_e
 	MULTICAST_ONE_NOSPECS,
 	MULTICAST_ONE_R_NOSPECS,
 } multicast_t;
+#endif
 
 extern float	pm_q2stepheight;
 
@@ -171,11 +175,13 @@ struct q2edict_s
 	vec3_t		absmin, absmax, size;
 	q2solid_t		solid;
 	int			clipmask;
-	q2edict_t		*owner;
+	struct q2edict_s		*owner;
 
 	// the game dll can add anything it wants after
 	// this point in the structure
 };
+
+typedef struct q2edict_s q2edict_t;
 
 #endif		// GAME_INCLUDE
 

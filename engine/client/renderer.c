@@ -1726,6 +1726,7 @@ TRACE(("dbg: R_ApplyRenderer: clearing world\n"));
 #ifdef Q2SERVER
 		else if (svs.gametype == GT_QUAKE2)
 		{
+			int i;
 			q2edict_t *q2ent;
 			for (i = 0; i < Q2MAX_MODELS; i++)
 			{
@@ -1741,22 +1742,7 @@ TRACE(("dbg: R_ApplyRenderer: clearing world\n"));
 				else
 					sv.models[i] = NULL;
 			}
-
-			World_ClearWorld (&sv.world, false);
-			q2ent = ge->edicts;
-			for (i=0 ; i<ge->num_edicts ; i++, q2ent = (q2edict_t *)((char *)q2ent + ge->edict_size))
-			{
-				if (!q2ent)
-					continue;
-				if (!q2ent->inuse)
-					continue;
-
-				if (q2ent->area.prev)
-				{
-					q2ent->area.prev = q2ent->area.next = NULL;
-					WorldQ2_LinkEdict (&sv.world, q2ent);	// relink ents so touch functions continue to work.
-				}
-			}
+			q2->sv.ReloadWorld();
 		}
 #endif
 #ifdef Q3SERVER

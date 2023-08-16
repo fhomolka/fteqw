@@ -27,7 +27,70 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define INVALID_SOCKET -1
 #endif
 
+#ifdef Q2SERVER //TODO(fhomolka): Until i fully decouple it
 
+#define	Q2MAX_ENT_CLUSTERS	16
+
+typedef enum
+{
+Q2SOLID_NOT,			// no interaction with other objects
+Q2SOLID_TRIGGER,		// only touch when inside, after moving
+Q2SOLID_BBOX,			// touch on edge
+Q2SOLID_BSP			// bsp clip, touch on edge
+} q2solid_t;
+
+typedef struct q2entity_state_s
+{
+	int		number;			// edict index
+
+	vec3_t	origin;
+	vec3_t	angles;
+	vec3_t	old_origin;		// for lerping
+	int		modelindex;
+	int		modelindex2, modelindex3, modelindex4;	// weapons, CTF flags, etc
+	int		frame;
+	int		skinnum;
+	unsigned int		effects;		// PGM - we're filling it, so it needs to be unsigned
+	int		renderfx;
+	int		solid;			// for client side prediction, 8*(bits 0-4) is x/y radius
+							// 8*(bits 5-9) is z down distance, 8(bits10-15) is z up
+							// gi.linkentity sets this properly
+	int		sound;			// for looping sounds, to guarantee shutoff
+	int		event;			// impulse events -- muzzle flashes, footsteps, etc
+							// events only go out for a single frame, they
+							// are automatically cleared each frame
+} q2entity_state_t;
+
+struct q2edict_s
+{
+	q2entity_state_t	s;
+	struct q2gclient_s	*client;
+	qboolean	inuse;
+	int			linkcount;
+
+	// FIXME: move these fields to a server private sv_entity_t
+	link_t		area;				// linked to a division node or leaf
+	
+	int			num_clusters;		// if -1, use headnode instead
+	int			clusternums[Q2MAX_ENT_CLUSTERS];
+	int			headnode;			// unused if num_clusters != -1
+	int			areanum, areanum2;
+
+	//================================
+
+	int			svflags;			// SVF_NOCLIENT, SVF_DEADMONSTER, SVF_MONSTER, etc
+	vec3_t		mins, maxs;
+	vec3_t		absmin, absmax, size;
+	q2solid_t		solid;
+	int			clipmask;
+	struct q2edict_s		*owner;
+
+	// the game dll can add anything it wants after
+	// this point in the structure
+};
+
+typedef struct q2edict_s q2edict_t;
+#endif
 
 int	sv_allow_cheats;
 qboolean SV_MayCheat(void)
@@ -1003,7 +1066,7 @@ void SV_Map_f (void)
 	else if (startspot && !isrestart && !newunit)
 	{
 #ifdef Q2SERVER
-		if (ge)
+		if (q2)
 		{
 			qboolean savedinuse[MAX_CLIENTS];
 			for (i=0 ; i<sv.allocated_client_slots; i++)
@@ -3243,9 +3306,9 @@ static void SV_SendGameCommand_f(void)
 		return;
 
 #ifdef Q2SERVER
-	if (ge)
+	if (q2)
 	{
-		ge->ServerCommand();
+		q2->sv.ServerCommand();
 	}
 	else
 #endif

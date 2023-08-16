@@ -396,7 +396,10 @@ void World_ClearWorld (world_t *w, qboolean relink)
 {
 #ifdef Q2SERVER
 	if (w == &sv.world && svs.gametype == GT_QUAKE2)
-		World_ClearWorld_Nodes(w, relink);
+	{
+		q2->sv.ClearWorld(w, relink);
+		World_InitBoxHull();
+	}
 	else
 #endif
 	{
@@ -715,151 +718,6 @@ void QDECL World_LinkEdict (world_t *w, wedict_t *ent, qboolean touch_triggers)
 	if (touch_triggers && ent->v->solid != SOLID_NOT)
 		World_TouchAllLinks (w, ent);
 }
-
-
-#ifdef Q2SERVER
-void VARGS WorldQ2_UnlinkEdict(world_t *w, q2edict_t *ent)
-{
-	if (!ent->area.prev)
-		return;		// not linked in anywhere
-	RemoveLink (&ent->area);
-	ent->area.prev = ent->area.next = NULL;
-}
-
-void VARGS WorldQ2_LinkEdict(world_t *w, q2edict_t *ent)
-{
-	areanode_t	*node;
-
-	if (ent->area.prev)
-		WorldQ2_UnlinkEdict (w, ent);	// unlink from old position
-		
-	if (ent == ge->edicts)
-		return;		// don't add the world
-
-	if (!ent->inuse)
-		return;
-
-	// set the size
-	VectorSubtract (ent->maxs, ent->mins, ent->size);
-	
-	// encode the size into the entity_state for client prediction
-	if (ent->solid == Q2SOLID_BBOX && !(ent->svflags & SVF_DEADMONSTER))
-	{	// assume that x/y are equal and symetric
-		ent->s.solid = COM_EncodeSize(ent->mins, ent->maxs);
-		/*
-		i = ent->maxs[0]/8;
-		if (i<1)
-			i = 1;
-		if (i>31)
-			i = 31;
-
-		// z is not symetric
-		j = (-ent->mins[2])/8;
-		if (j<1)
-			j = 1;
-		if (j>31)
-			j = 31;
-
-		// and z maxs can be negative...
-		k = (ent->maxs[2]+32)/8;
-		if (k<1)
-			k = 1;
-		if (k>63)
-			k = 63;
-
-		//fixme: 32bit?
-		ent->s.solid = (k<<10) | (j<<5) | i;*/
-	}
-	else if (ent->solid == Q2SOLID_BSP)
-	{
-		ent->s.solid = ES_SOLID_BSP;		// a solid_bbox will never create this value
-	}
-	else
-		ent->s.solid = 0;
-
-	// set the abs box
-	if (ent->solid == Q2SOLID_BSP && 
-	(ent->s.angles[0] || ent->s.angles[1] || ent->s.angles[2]) )
-	{	// expand for rotation
-		float		max, v;
-		int			i;
-
-		max = 0;
-		for (i=0 ; i<3 ; i++)
-		{
-			v =fabs( ent->mins[i]);
-			if (v > max)
-				max = v;
-			v =fabs( ent->maxs[i]);
-			if (v > max)
-				max = v;
-		}
-		for (i=0 ; i<3 ; i++)
-		{
-			ent->absmin[i] = ent->s.origin[i] - max;
-			ent->absmax[i] = ent->s.origin[i] + max;
-		}
-	}
-	else
-	{	// normal
-		VectorAdd (ent->s.origin, ent->mins, ent->absmin);	
-		VectorAdd (ent->s.origin, ent->maxs, ent->absmax);
-	}
-
-	// because movement is clipped an epsilon away from an actual edge,
-	// we must fully check even when bounding boxes don't quite touch
-	ent->absmin[0] -= 1;
-	ent->absmin[1] -= 1;
-	ent->absmin[2] -= 1;
-	ent->absmax[0] += 1;
-	ent->absmax[1] += 1;
-	ent->absmax[2] += 1;
-
-// link to PVS leafs
-	{
-		pvscache_t cache;
-		w->worldmodel->funcs.FindTouchedLeafs(w->worldmodel, &cache, ent->absmin, ent->absmax);
-
-		//evilness: copy into the q2 state (we don't have anywhere else to store it, and there's a chance that the gamecode will care).
-		ent->num_clusters = cache.num_leafs;
-		if (ent->num_clusters > (int)countof(ent->clusternums))
-			ent->num_clusters = (int)countof(ent->clusternums);
-		memcpy(ent->clusternums, cache.leafnums, min(sizeof(ent->clusternums), sizeof(cache.leafnums)));
-		ent->headnode = cache.headnode;
-		ent->areanum = cache.areanum;
-		ent->areanum2 = cache.areanum2;
-	}
-
-	// if first time, make sure old_origin is valid
-	if (!ent->linkcount)
-	{
-		VectorCopy (ent->s.origin, ent->s.old_origin);
-	}
-	ent->linkcount++;
-
-	if (ent->solid == Q2SOLID_NOT)
-		return;
-
-// find the first node that the ent's box crosses
-	node = w->areanodes;
-	while (1)
-	{
-		if (node->axis == -1)
-			break;
-		if (ent->absmin[node->axis] > node->dist)
-			node = node->children[0];
-		else if (ent->absmax[node->axis] < node->dist)
-			node = node->children[1];
-		else
-			break;		// crosses the node
-	}
-
-	// link it in	
-	InsertLinkBefore (&ent->area, &node->edicts);
-}
-#endif
-
-
 
 
 /*
@@ -1271,84 +1129,7 @@ int World_AreaEdicts (world_t *w, vec3_t mins, vec3_t maxs, wedict_t **list, int
 }
 #endif
 
-#ifdef Q2SERVER
-const float	*area_mins, *area_maxs;
-q2edict_t	**area_q2list;
-int		area_count, area_maxcount;
-int		area_type;
-static void WorldQ2_AreaEdicts_r (areanode_t *node)
-{
-	link_t		*l, *next, *start;
-	q2edict_t		*check;
 
-	// touch linked edicts
-	start = &node->edicts;
-
-	for (l=start->next  ; l != start ; l = next)
-	{
-		if (!l)
-		{
-			int i;
-			World_ClearWorld(&sv.world, false);
-			check = ge->edicts;
-			for (i = 0; i < ge->num_edicts; i++, check = (q2edict_t	*)((char *)check + ge->edict_size))
-				memset(&check->area, 0, sizeof(check->area));
-			Con_Printf ("SV_AreaEdicts: Bad links\n");
-			return;
-		}
-		next = l->next;
-		check = Q2EDICT_FROM_AREA(l);
-
-		if (check->solid == Q2SOLID_NOT)
-			continue;		// deactivated
-
-		/*q2 still has solid/trigger lists, emulate that here*/
-		if ((check->solid == Q2SOLID_TRIGGER) != (area_type == AREA_TRIGGER))
-			continue;
-
-		if (check->absmin[0] > area_maxs[0]
-		|| check->absmin[1] > area_maxs[1]
-		|| check->absmin[2] > area_maxs[2]
-		|| check->absmax[0] < area_mins[0]
-		|| check->absmax[1] < area_mins[1]
-		|| check->absmax[2] < area_mins[2])
-			continue;		// not touching
-
-		if (area_count == area_maxcount)
-		{
-			Con_Printf ("SV_AreaEdicts: MAXCOUNT\n");
-			return;
-		}
-
-		area_q2list[area_count] = check;
-		area_count++;
-	}
-	
-	if (node->axis == -1)
-		return;		// terminal node
-
-	// recurse down both sides
-	if ( area_maxs[node->axis] > node->dist )
-		WorldQ2_AreaEdicts_r ( node->children[0] );
-	if ( area_mins[node->axis] < node->dist )
-		WorldQ2_AreaEdicts_r ( node->children[1] );
-}
-
-int VARGS WorldQ2_AreaEdicts (world_t *w, const vec3_t mins, const vec3_t maxs, q2edict_t **list,
-	int maxcount, int areatype)
-{
-	area_mins = mins;
-	area_maxs = maxs;
-	area_q2list = list;
-	area_count = 0;
-	area_maxcount = maxcount;
-	area_type = areatype;
-
-	WorldQ2_AreaEdicts_r (w->areanodes);
-
-	return area_count;
-}
-#endif
 
 /*
 ================
@@ -1361,93 +1142,7 @@ testing object's origin to get a point to use with the returned hull.
 ================
 */
 
-#ifdef Q2SERVER
-static model_t *WorldQ2_ModelForEntity (world_t *w, q2edict_t *ent)
-{
-	model_t	*model;
 
-// decide which clipping hull to use, based on the size
-	if (ent->solid == Q2SOLID_BSP)
-	{	// explicit hulls in the BSP model
-		model = w->Get_CModel(w, ent->s.modelindex);
-
-		if (!model)
-			SV_Error ("Q2SOLID_BSP with a non bsp model");
-
-		if (model->loadstate == MLS_LOADED)
-			return model;
-	}
-
-	// create a temp hull from bounding box sizes
-
-	return CM_TempBoxModel (ent->mins, ent->maxs);
-}
-#endif
-
-#ifdef Q2SERVER
-void WorldQ2_ClipMoveToEntities (world_t *w, moveclip_t *clip )
-{
-	int			i, num;
-	q2edict_t		*touchlist[MAX_Q2EDICTS], *touch;
-	trace_t		trace;
-	model_t		*model;
-	float		*angles;
-
-	num = WorldQ2_AreaEdicts (w, clip->boxmins, clip->boxmaxs, touchlist
-		, MAX_Q2EDICTS, AREA_SOLID);
-
-	// be careful, it is possible to have an entity in this
-	// list removed before we get to it (killtriggered)
-	for (i=0 ; i<num ; i++)
-	{
-		touch = touchlist[i];
-		if (touch->solid == Q2SOLID_NOT)
-			continue;
-		if (touch == clip->q2passedict)
-			continue;
-		if (clip->trace.allsolid)
-			return;
-		if (clip->q2passedict)
-		{
-		 	if (touch->owner == clip->q2passedict)
-				continue;	// don't clip against own missiles
-			if (clip->q2passedict->owner == touch)
-				continue;	// don't clip against owner
-		}
-
-		if (touch->svflags & SVF_DEADMONSTER)
-		if ( !(clip->hitcontentsmask & Q2CONTENTS_DEADMONSTER))
-				continue;
-
-		// might intersect, so do an exact clip
-		model = WorldQ2_ModelForEntity (w, touch);
-		angles = touch->s.angles;
-		if (touch->solid != Q2SOLID_BSP)
-			angles = vec3_origin;	// boxes don't rotate
-
-		if (touch->svflags & SVF_MONSTER)
-			World_TransformedTrace (model, 0, NULL, clip->start, clip->end, clip->mins2, clip->maxs2, false, &trace, touch->s.origin, angles, clip->hitcontentsmask);
-		else
-			World_TransformedTrace (model, 0, NULL, clip->start, clip->end, clip->mins, clip->maxs, false, &trace, touch->s.origin, angles, clip->hitcontentsmask);
-
-		if (trace.allsolid || trace.startsolid ||
-		trace.fraction < clip->trace.fraction)
-		{
-			trace.ent = (edict_t *)touch;
-		 	if (clip->trace.startsolid)
-			{
-				clip->trace = trace;
-				clip->trace.startsolid = true;
-			}
-			else
-				clip->trace = trace;
-		}
-		else if (trace.startsolid)
-			clip->trace.startsolid = true;
-	}
-#undef ped
-}
-#endif
 //===========================================================================
 
 //a portal is flush with a world surface behind it.
@@ -2726,42 +2421,7 @@ trace_t World_Move (world_t *w, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t e
 
 	return clip.trace;
 }
-#ifdef Q2SERVER
-trace_t WorldQ2_Move (world_t *w, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int hitcontentsmask, q2edict_t *passedict)
-{
-	moveclip_t	clip;
 
-	memset ( &clip, 0, sizeof ( moveclip_t ) );
-
-// clip to world
-	w->worldmodel->funcs.NativeTrace(w->worldmodel, 0, NULLFRAMESTATE, NULL, start, end, mins, maxs, false, hitcontentsmask, &clip.trace);
-	clip.trace.ent = ge->edicts;
-
-	if (clip.trace.fraction == 0)
-		return clip.trace;
-
-	clip.start = start;
-	clip.end = end;
-	clip.mins = mins;
-	clip.maxs = maxs;
-	clip.type = MOVE_NORMAL;
-	clip.hitcontentsmask = hitcontentsmask;
-	clip.passedict = NULL;
-	clip.q2passedict = passedict;
-
-	VectorCopy (mins, clip.mins2);
-	VectorCopy (maxs, clip.maxs2);
-	
-// create the bounding box of the entire move
-//FIXME: should we use clip.trace.endpos here?	
-	World_MoveBounds ( start, clip.mins2, clip.maxs2, end, clip.boxmins, clip.boxmaxs );
-
-// clip to entities
-	WorldQ2_ClipMoveToEntities(w, &clip);
-
-	return clip.trace;
-}
-#endif
 
 static void (QDECL *world_current_physics_engine)(world_t*world);
 qboolean QDECL World_RegisterPhysicsEngine(const char *enginename, void(QDECL*startupfunc)(world_t*world))

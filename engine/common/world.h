@@ -81,6 +81,7 @@ typedef struct trace_s
 	int					bone_id;
 } trace_t;
 
+#if 0 // NOTE(fhomolka): Moved to plugin
 typedef struct q2trace_s
 {
 	qboolean	allsolid;	// if true, plane is not valid
@@ -92,7 +93,7 @@ typedef struct q2trace_s
 	int			contents;	// contents on other side of surface hit
 	void	*ent;		// not set by CM_*() functions
 } q2trace_t;
-
+#endif
 
 // edict->flags
 #define	FL_FLY					(1<<0)
@@ -370,12 +371,6 @@ trace_t World_Move (world_t *w, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t e
 
 #ifdef Q2SERVER
 typedef struct q2edict_s q2edict_t;
-
-void VARGS WorldQ2_LinkEdict(world_t *w, q2edict_t *ent);
-void VARGS WorldQ2_UnlinkEdict(world_t *w, q2edict_t *ent);
-int VARGS WorldQ2_AreaEdicts (world_t *w, const vec3_t mins, const vec3_t maxs, q2edict_t **list,
-	int maxcount, int areatype);
-trace_t WorldQ2_Move (world_t *w, vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int hitcontentsmask, q2edict_t *passedict);
 #endif
 
 

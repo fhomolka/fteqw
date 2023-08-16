@@ -2459,7 +2459,7 @@ qboolean PR_KrimzonParseCommand(const char *s)
 	globalvars_t *pr_globals;
 
 #ifdef Q2SERVER
-	if (ge)
+	if (q2->sv.HasGameExport())
 		return false;
 #endif
 	if (!svprogfuncs)
@@ -2488,10 +2488,10 @@ qboolean PR_UserCmd(const char *s)
 {
 	globalvars_t *pr_globals;
 #ifdef Q2SERVER
-	if (ge)
+	if (q2->sv.HasGameExport())
 	{
 		SV_BeginRedirect (RD_CLIENT, host_client->language);
-		ge->ClientCommand(host_client->q2edict);
+		q2->sv.ClientCommand(host_client->q2edict);
 		SV_EndRedirect ();
 		return true;	//the dll will convert it to chat.
 	}
@@ -4856,7 +4856,7 @@ static void PR_Lightstyle_f(void)
 					Con_Printf("Style %i: %s\n", style, sv.strings.configstring[Q2CS_LIGHTS+style]);
 		}
 		else if ((unsigned)style < (unsigned)Q2MAX_LIGHTSTYLES)
-			PFQ2_Configstring (Q2CS_LIGHTS+style, Cmd_Argv(2));
+			q2->sv.PF_Configstring (Q2CS_LIGHTS+style, Cmd_Argv(2));
 		break;
 #endif
 	case GT_PROGS:

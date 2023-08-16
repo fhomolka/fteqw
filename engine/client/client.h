@@ -1351,9 +1351,6 @@ void CL_DumpPacket(void);
 void CL_ParseEstablished(void);
 void CLQW_ParseServerMessage (void);
 void CLNQ_ParseServerMessage (void);
-#ifdef Q2CLIENT
-void CLQ2_ParseServerMessage (void);
-#endif
 void CL_ShowTrafficUsage(float x, float y);
 void CL_NewTranslation (int slot);
 
@@ -1631,20 +1628,7 @@ extern	qboolean care_f_modified;
 
 //random files (fixme: clean up)
 
-#ifdef Q2CLIENT
-unsigned int CLQ2_GatherSounds(vec3_t *positions, unsigned int *entnums, sfx_t **sounds, unsigned int max);
-void CLQ2_ParseTEnt (void);
-void CLQ2_AddEntities (void);
-void CLQ2_ParseBaseline (void);
-void CLQ2_ClearParticleState(void);
-void CLR1Q2_ParsePlayerUpdate(void);
-void CLQ2_ParseFrame (int extrabits);
-void CLQ2_ParseMuzzleFlash (void);
-void CLQ2_ParseMuzzleFlash2 (void);
-void CLQ2_ParseInventory (int seat);
-int CLQ2_RegisterTEntModels (void);
-void CLQ2_WriteDemoBaselines(sizebuf_t *buf);
-#endif
+
 
 #ifdef HLCLIENT
 //networking

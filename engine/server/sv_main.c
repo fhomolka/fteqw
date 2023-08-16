@@ -25,7 +25,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #endif
 #include <sys/types.h>
 #ifndef CLIENTONLY
-#define Q2EDICT_NUM(i) (q2edict_t*)((char *)ge->edicts+(i)*ge->edict_size)
 
 #define INVIS_CHAR1 12
 #define INVIS_CHAR2 (char)138
@@ -593,8 +592,8 @@ void SV_DropClient (client_t *drop)
 		break;
 	case GT_QUAKE2:
 #ifdef Q2SERVER
-		if (ge)
-			ge->ClientDisconnect(drop->q2edict);
+		if (q2)
+			q2->sv.ClientDisconnect(drop->q2edict);
 #endif
 		break;
 	case GT_QUAKE3:
@@ -924,24 +923,7 @@ int SV_CalcPing (client_t *cl, qboolean forcecalc)
 		break;
 #ifdef Q2SERVER
 	case SCP_QUAKE2:
-		{
-			q2client_frame_t *frame;
-			ping = 0;
-			count = 0;
-			for (frame = cl->frameunion.q2frames, i=0 ; i<Q2UPDATE_BACKUP ; i++, frame++)
-			{
-				if (frame->ping_time > 0)
-				{
-					ping += frame->ping_time;
-					count++;
-				}
-			}
-			if (!count)
-				return 9999;
-			ping /= count;
-
-		}
-		return ping;
+		return q2->sv.CalcPing(cl, forcecalc);
 #endif
 	case SCP_QUAKE3:
 		break;
@@ -2305,7 +2287,7 @@ void SV_ClientProtocolExtensionsChanged(client_t *client)
 #endif
 
 #ifdef Q2SERVER
-	case SCP_QUAKE2:
+	case SCP_QUAKE2://TODO(fhomolka): pluginise
 		// build a new connection
 		// accept the new client
 		// this is the only place a client_t is ever initialized
@@ -2313,7 +2295,7 @@ void SV_ClientProtocolExtensionsChanged(client_t *client)
 		if (client->frameunion.q2frames)
 			Z_Free(client->frameunion.q2frames);
 
-		client->frameunion.q2frames = Z_Malloc(sizeof(q2client_frame_t)*Q2UPDATE_BACKUP);
+		client->frameunion.q2frames = NULL;//Z_Malloc(sizeof(q2client_frame_t)*Q2UPDATE_BACKUP);
 		break;
 #endif
 
@@ -2566,6 +2548,7 @@ client_t *SV_AddSplit(client_t *controller, char *info, int id)
 	{
 #ifdef Q2SERVER
 	case GT_QUAKE2:
+		/*TODO(fhomolka):
 		cl->q2edict = Q2EDICT_NUM(i+1);
 
 		if (!ge->ClientConnect(cl->q2edict, info))
@@ -2580,6 +2563,7 @@ client_t *SV_AddSplit(client_t *controller, char *info, int id)
 		}
 
 		ge->ClientUserinfoChanged(cl->q2edict, info);
+		*/
 		break;
 #endif
 	default:
@@ -3062,11 +3046,11 @@ void SV_DoDirectConnect(svconnectinfo_t *fte_restrict info)
 			Con_DPrintf ("* Rejected non-q2 client.\n");
 			return;
 		}
-		q2ent = Q2EDICT_NUM(edictnum);
+		q2ent = q2->sv.Q2EDICT_NUM(edictnum);
 		temp.edict = NULL;
 		temp.q2edict = q2ent;
 
-		if (!ge->ClientConnect(q2ent, info->userinfo))
+		if (!q2->sv.ClientConnect(q2ent, info->userinfo))
 		{
 			const char *reject = Info_ValueForKey(info->userinfo, "rejmsg");
 			if (*reject)
@@ -3077,7 +3061,7 @@ void SV_DoDirectConnect(svconnectinfo_t *fte_restrict info)
 			return;
 		}
 
-		ge->ClientUserinfoChanged(q2ent, info->userinfo);
+		q2->sv.ClientUserinfoChanged(q2ent, info->userinfo);
 
 
 		break;
@@ -4993,7 +4977,7 @@ dominping:
 
 #ifdef Q2SERVER
 				if (cl->protocol == SCP_QUAKE2)
-					SVQ2_ExecuteClientMessage(cl);
+					q2->sv.ExecuteClientMessage(cl);
 				else
 #endif
 					SV_ExecuteClientMessage (cl);
@@ -5106,7 +5090,7 @@ qboolean SV_ReadPackets (float *delay)
 
 		#ifdef Q2SERVER
 							if (cl->protocol == SCP_QUAKE2)
-								SVQ2_ExecuteClientMessage(cl);
+								q2->sv.ExecuteClientMessage(cl);
 							else
 		#endif
 								SV_ExecuteClientMessage (cl);
@@ -5321,21 +5305,6 @@ void SV_CheckVars (void)
 	else
 		InfoBuf_SetValueForKey (&svs.info, "needpass", va("%i",v));
 }
-
-#ifdef Q2SERVER
-void SVQ2_ClearEvents(void)
-{
-	q2edict_t	*ent;
-	int		i;
-
-	for (i=0 ; i<ge->num_edicts ; i++, ent++)
-	{
-		ent = Q2EDICT_NUM(i);
-		// events only last for a single message
-		ent->s.event = 0;
-	}
-}
-#endif
 
 
 /*
@@ -5710,8 +5679,8 @@ float SV_Frame (void)
 
 
 #ifdef Q2SERVER
-		if (ge && ge->edicts)
-			SVQ2_ClearEvents();
+		if (q2)
+			q2->sv.ClearEvents();
 #endif
 		idletime = 0;
 	}
