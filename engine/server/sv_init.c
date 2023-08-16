@@ -1436,7 +1436,7 @@ MSV_OpenUserDatabase();
 		break;
 #ifdef Q2SERVER
 	case GT_QUAKE2:
-		//TODO: SV_UpdateMaxPlayers(svq2_maxclients);
+		//TODO(fhomolka): SV_UpdateMaxPlayers(svq2_maxclients);
 		SV_UpdateMaxPlayers(1);
 		for (i=0 ; i<sv.allocated_client_slots ; i++)
 		{

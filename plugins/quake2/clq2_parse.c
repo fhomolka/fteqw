@@ -138,7 +138,7 @@ static void CLQ2_ParseServerData (void)
 	}
 
 	cls.netchan.message.prim = cls.netchan.netprim;
-	//TODO: MSG_ChangePrimitives(cls.netchan.netprim);
+	//TODO(fhomolka): MSG_ChangePrimitives(cls.netchan.netprim);
 
 	if (cl.playerview[0].playernum == -1)
 	{	// playing a cinematic or showing a pic, not a level
@@ -369,20 +369,20 @@ isilegible:
 			break;
 #endif
 		case svcq2_sound:		//9			// <see code>
-			//TODO: CLQ2_ParseStartSoundPacket();
+			//TODO(fhomolka): CLQ2_ParseStartSoundPacket();
 			break;
 		case svcq2_print:		//10			// [qbyte] id [string] null terminated string
 			i = MSG_ReadByte ();
 			s = MSG_ReadString ();
 
-			//TODO: CL_ParsePrint(s, i);
+			//TODO(fhomolka): CL_ParsePrint(s, i);
 			break;
 		case svcq2_stufftext:	//11			// [string] stuffed into client's console buffer, should be \n terminated
 			s = MSG_ReadString ();
 			Con_DPrintf ("stufftext: %s\n", s);
 			if (!strncmp(s, "precache", 8))	//big major hack. Q2 uses a command that q1 has as a cvar.
 			{	//call the q2 precache function.
-				//TODO: CLQ2_Precache_f();
+				//TODO(fhomolka): CLQ2_Precache_f();
 			}
 			else
 				Cbuf_AddText (s, RESTRICT_SERVER);	//don't let the local user cheat
@@ -392,7 +392,7 @@ isilegible:
 			CLQ2_ParseServerData ();
 			break;
 		case svcq2_configstring:	//13		// [short] [string]
-			//TODO: CLQ2_ParseConfigString();
+			//TODO(fhomolka): CLQ2_ParseConfigString();
 			break;
 		case svcq2_spawnbaseline://14
 			CLQ2_ParseBaseline();
