@@ -443,6 +443,20 @@ static qboolean QDECL PlugBI_ExportInterface(const char *name, void *interfacept
 #endif
 	if (!strcmp(name, "Crypto"))
 		return NET_RegisterCrypto(currentplug, interfaceptr);
+#if defined(Q2SERVER)||defined(Q2CLIENT)
+	if (!strcmp(name, "Quake2Plugin") && sizeof(*q2) == structsize)
+	{
+		if (q2plug)
+		{
+			struct plugin_s *p = currentplug;
+			Plug_Close(q2plug);
+			currentplug = p;
+		}
+		q2 = interfaceptr;
+		q2plug = currentplug;
+		return true;
+	}
+#endif
 #if defined(Q3SERVER)||defined(Q3CLIENT)
 	if (!strcmp(name, "Quake3Plugin") && sizeof(*q3) == structsize)
 	{
@@ -1616,6 +1630,14 @@ void Plug_Close(plugin_t *plug)
 #endif
 	FS_UnRegisterFileSystemModule(plug);
 	Mod_UnRegisterAllModelFormats(plug);
+
+#if defined(Q2SERVER)||defined(Q2CLIENT)
+	if (q2plug == plug)
+	{
+		q2 = NULL;
+		q2plug = NULL;
+	}
+#endif
 
 #if defined(Q3SERVER)||defined(Q3CLIENT)
 	if (q3plug == plug)
