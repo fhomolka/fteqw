@@ -124,6 +124,9 @@ void SVQ2_ExecuteClientMessage (client_t *cl)
 	}
 	else
 	{
+		//TEMP(fhomolka): Don't crash
+		if(!cl->frameunion.q2frames) goto leave;
+
 		frame = &cl->frameunion.q2frames[cl->netchan.incoming_acknowledged & Q2UPDATE_MASK];
 		if (frame->senttime != -1)
 		{
@@ -144,8 +147,9 @@ void SVQ2_ExecuteClientMessage (client_t *cl)
 			frame->senttime = -1;
 			frame->ping_time = ping_time;
 		}
-	}
 
+	}
+leave: //TEMP(fhomolka): check a few lines above
 	// save time for ping calculations
 //	cl->frameunion.q2frames[cl->netchan.outgoing_sequence & Q2UPDATE_MASK].senttime = realtime*1000;
 //	cl->frameunion.q2frames[cl->netchan.outgoing_sequence & Q2UPDATE_MASK].ping_time = -1;
