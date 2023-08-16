@@ -290,7 +290,7 @@ static struct q2gamecode_s q2funcs =
 
 qboolean Plug_Init(void)
 {
-	if(plugfuncs->ExportInterface("Quake2Plugin", &q2funcs, sizeof(q2funcs)))
+	if(!plugfuncs->ExportInterface("Quake2Plugin", &q2funcs, sizeof(q2funcs)))
 	{
 		Con_Printf("Engine is already using a q2-derived gamecode plugin.\n");
 		return false;
