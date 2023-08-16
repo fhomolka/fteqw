@@ -2541,10 +2541,9 @@ client_t *SV_AddSplit(client_t *controller, char *info, int id)
 	{
 #ifdef Q2SERVER
 	case GT_QUAKE2:
-		/*TODO(fhomolka):
-		cl->q2edict = Q2EDICT_NUM(i+1);
+		cl->q2edict = q2->sv.Q2EDICT_NUM(i+1);
 
-		if (!ge->ClientConnect(cl->q2edict, info))
+		if (!q2->sv.ClientConnect(cl->q2edict, info))
 		{
 			const char *reject = Info_ValueForKey(info, "rejmsg");
 			if (*reject)
@@ -2555,8 +2554,7 @@ client_t *SV_AddSplit(client_t *controller, char *info, int id)
 			return NULL;
 		}
 
-		ge->ClientUserinfoChanged(cl->q2edict, info);
-		*/
+		q2->sv.ClientUserinfoChanged(cl->q2edict, info);
 		break;
 #endif
 	default:
