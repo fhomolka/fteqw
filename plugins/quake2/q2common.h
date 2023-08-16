@@ -101,4 +101,6 @@ void RQ2_DrawNameTags(vec3_t org, vec3_t diff, vec3_t screenspace,
 	float (*TraceLine) (vec3_t start, vec3_t end, vec3_t impact, vec3_t normal, int *ent),
 	int (*DrawTextField)(int x, int y, int w, int h, const char *text, unsigned int defaultmask, unsigned int fieldflags, struct font_s *font, vec2_t fontscale));
 
+void SVQ2_ClientProtocolExtensionsChanged(client_t *client);
+
 #endif //Q2COMMON_H

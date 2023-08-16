@@ -272,6 +272,7 @@ static struct q2gamecode_s q2funcs =
 		SVQ2_CalcPing,
 		SVQ2_ClientWritePing,
 		SVQ2_ServerCommand,
+		SVQ2_ClientProtocolExtensionsChanged,
 		SVQ2_WriteLevel,
 		SVQ2_WriteGame,
 		ReadLevel,

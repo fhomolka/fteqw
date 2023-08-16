@@ -99,6 +99,8 @@ struct q2gamecode_s
 		int 		(*CalcPing)					(client_t *cl, qboolean forcecalc);
 		void 		(*ClientWritePing)			(client_t *cl);
 		void 		(*ServerCommand)			(void);
+		//sv_main//
+		void (*ClientProtocolExtensionsChanged)	(client_t *client);
 		//savegame.c//
 		void 		(*WriteLevel)				(char *filename);
 		void 		(*WriteGame)				(char *filename, qboolean autosave);

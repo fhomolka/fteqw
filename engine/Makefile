@@ -958,6 +958,7 @@ ifeq (1,$(LINK_QUAKE2))
     	svq2_ents.o \
     	svq2_game.o \
     	svq2_phys.o\
+    	svq2_main.o \
     	q2world.o 	\
     	q2pmove.o 	\
 		q2common.o	
