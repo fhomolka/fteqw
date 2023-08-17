@@ -21,11 +21,11 @@ static void CLQ2_ParseServerData (void)
 //
 // wipe the client_state_t struct
 //
-	//TODO(fhomolka):
-/*
+	//TODO(fhomolka): plug interface
+
 	SCR_SetLoadingStage(LS_CLIENT);
 	SCR_BeginLoadingPlaque();
-*/
+
 //	CL_ClearState ();
 	cls.state = ca_onserver;
 
@@ -45,7 +45,7 @@ static void CLQ2_ParseServerData (void)
 			i -= PEXT_SPLITSCREEN;
 		if (i)
 			plugfuncs->EndGame ("Unsupported q2 protocol extensions: %x", i);
-		i = MSG_ReadLong ();
+		i = Imsgfuncs->ReadLong ();
 
 		if (cls.fteprotocolextensions & PEXT_FLOATCOORDS)
 			cls.netchan.netprim.coordtype = COORDTYPE_FLOAT_32;
@@ -82,9 +82,11 @@ static void CLQ2_ParseServerData (void)
 	cl.servercount = svcnt;
 	//Cam_AutoTrack_Update(NULL);
 	
+/*
 #ifdef QUAKEHUD
 	Stats_NewMap();
 #endif
+*/
 
 	// parse player entity number
 	cl.playerview[0].playernum = Imsgfuncs->ReadShort ();
@@ -138,11 +140,13 @@ static void CLQ2_ParseServerData (void)
 	}
 
 	cls.netchan.message.prim = cls.netchan.netprim;
-	//TODO(fhomolka): MSG_ChangePrimitives(cls.netchan.netprim);
+	//TODO(fhomolka): plug interface
+	MSG_ChangePrimitives(cls.netchan.netprim);
 
 	if (cl.playerview[0].playernum == -1)
 	{	// playing a cinematic or showing a pic, not a level
-		//TODO: SCR_EndLoadingPlaque();
+		//TODO(fhomolka): plug interface
+		SCR_EndLoadingPlaque();
 		CL_MakeActive("Quake2");
 		if (!FCheckExists(str) && !FCheckExists(va("video/%s", str)))
 		{
@@ -237,8 +241,8 @@ static void CLQ2_ParseZPacket(void)
 }
 static void CLR1Q2_ParseSetting(void)
 {
-	int setting = MSG_ReadLong();
-	int value = MSG_ReadLong();
+	int setting = Imsgfuncs->ReadLong();
+	int value = Imsgfuncs->ReadLong();
 
 	if (setting == R1Q2_SVSET_FPS)
 	{
@@ -247,7 +251,110 @@ static void CLR1Q2_ParseSetting(void)
 			Con_Printf("warning: fps rate changed mid-game\n");	//fixme: we need to clean up lerping stuff. if its now lower, we might have a whole load of things waiting ages for a timeout.
 	}
 }
+
+
+static void CLQ2_ParseStartSoundPacket(void)
+{
+	vec3_t  pos_v;
+	float	*pos;
+	int 	channel, ent;
+	int 	sound_num;
+	float 	volume;
+	float 	attenuation;
+	int		flags;
+	float	ofs;
+	sfx_t	*sfx;
+
+	flags = Imsgfuncs->ReadByte ();
+
+	if ((flags & Q2SND_LARGEIDX) && (cls.fteprotocolextensions & PEXT_SOUNDDBL))
+		sound_num = Imsgfuncs->ReadShort();
+	else
+		sound_num = Imsgfuncs->ReadByte ();
+
+	if (flags & Q2SND_VOLUME)
+		volume = Imsgfuncs->ReadByte () / 255.0;
+	else
+		volume = Q2DEFAULT_SOUND_PACKET_VOLUME;
+
+	if (flags & Q2SND_ATTENUATION)
+		attenuation = Imsgfuncs->ReadByte () / 64.0;
+	else
+		attenuation = Q2DEFAULT_SOUND_PACKET_ATTENUATION;
+
+	if (flags & Q2SND_OFFSET)
+		ofs = Imsgfuncs->ReadByte () / 1000.0;
+	else
+		ofs = 0;
+
+	if (flags & Q2SND_ENT)
+	{	// entity reletive
+		channel = Imsgfuncs->ReadShort();
+		ent = channel>>3;
+		if (ent > MAX_EDICTS)
+			plugfuncs->EndGame ("CLQ2_ParseStartSoundPacket: ent = %i", ent);
+
+		channel &= 7;
+	}
+	else
+	{
+		ent = 0;
+		channel = 0;
+	}
+
+	if (flags & Q2SND_POS)
+	{	// positioned in space
+		if ((flags & Q2SND_LARGEPOS) && (cls.fteprotocolextensions & PEXT_FLOATCOORDS))
+		{
+			pos_v[0] = Imsgfuncs->ReadFloat();
+			pos_v[1] = Imsgfuncs->ReadFloat();
+			pos_v[2] = Imsgfuncs->ReadFloat();
+		}
+		else
+		{
+			pos_v[0] = Imsgfuncs->ReadCoord();
+			pos_v[1] = Imsgfuncs->ReadCoord();
+			pos_v[2] = Imsgfuncs->ReadCoord();
+		}
+
+		pos = pos_v;
+	}
+	else	// use entity number
+	{
+		CLQ2_GetNumberedEntityInfo(ent, pos_v, NULL);
+		pos = pos_v;
+//		pos = NULL;
+	}
+
+	if (!cl.sound_precache[sound_num])
+		return;
+
+	sfx = cl.sound_precache[sound_num];
+	if (sfx->name[0] == '*')
+	{	//a 'sexed' sound
+		if (ent > 0 && ent <= MAX_CLIENTS)
+		{
+			char *model = Iworldfuncs->GetIBufKey(&cl.players[ent-1].userinfo, "skin");
+			char *skin;
+			skin = strchr(model, '/');
+			if (skin)
+				*skin = '\0';
+			if (*model)
+				sfx = Iaudiofuncs->PrecacheSound(va("players/%s/%s", model, cl.sound_precache[sound_num]->name+1));
+		}
+		//fall back to male if it failed to load.
+		//note: threaded loading can still make it silent the first time we hear it.
+		if (sfx->loadstate == SLS_FAILED)
+			sfx = Iaudiofuncs->PrecacheSound(va("players/male/%s", cl.sound_precache[sound_num]->name+1));
+	}
+	Iaudiofuncs->StartSound (ent, channel, sfx, pos, NULL, volume, attenuation, ofs, 0, 0);
+}
+
+
+
+
 void CL_WriteDemoMessage (sizebuf_t *msg, int payloadoffset);
+
 
 #define SHOWNETEOM(x) if(cl_shownet.value>=2)Con_Printf ("%3i:%s\n", Imsgfuncs->ReadCount(), x);
 #define SHOWNET(x) if(cl_shownet.value>=2)Con_Printf ("%3i:%s\n", Imsgfuncs->ReadCount()-1, x);
@@ -369,16 +476,16 @@ isilegible:
 			break;
 #endif
 		case svcq2_sound:		//9			// <see code>
-			//TODO(fhomolka): CLQ2_ParseStartSoundPacket();
+			CLQ2_ParseStartSoundPacket();
 			break;
 		case svcq2_print:		//10			// [qbyte] id [string] null terminated string
-			i = MSG_ReadByte ();
-			s = MSG_ReadString ();
+			i = Imsgfuncs->ReadByte ();
+			s = Imsgfuncs->ReadString ();
 
 			//TODO(fhomolka): CL_ParsePrint(s, i);
 			break;
 		case svcq2_stufftext:	//11			// [string] stuffed into client's console buffer, should be \n terminated
-			s = MSG_ReadString ();
+			s = Imsgfuncs->ReadString ();
 			Con_DPrintf ("stufftext: %s\n", s);
 			if (!strncmp(s, "precache", 8))	//big major hack. Q2 uses a command that q1 has as a cvar.
 			{	//call the q2 precache function.

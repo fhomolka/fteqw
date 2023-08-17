@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "shader.h"
 #include "fs.h"
 
-void CL_GetNumberedEntityInfo (int num, float *org, float *ang);
+//void CL_GetNumberedEntityInfo (int num, float *org, float *ang);
 void CLDP_ParseDarkPlaces5Entities(void);
 static void CL_SetStatNumeric (int pnum, int stat, int ivalue, float fvalue);
 #define CL_SetStatInt(pnum,stat,ival) do{int thevalue=ival; CL_SetStatNumeric(pnum,stat,thevalue,thevalue);}while(0)
@@ -4993,98 +4993,7 @@ static void CLQW_ParseStartSoundPacket(void)
 }
 
 #ifdef Q2CLIENT
-static void CLQ2_ParseStartSoundPacket(void)
-{
-	vec3_t  pos_v;
-	float	*pos;
-	int 	channel, ent;
-	int 	sound_num;
-	float 	volume;
-	float 	attenuation;
-	int		flags;
-	float	ofs;
-	sfx_t	*sfx;
 
-	flags = MSG_ReadByte ();
-
-	if ((flags & Q2SND_LARGEIDX) && (cls.fteprotocolextensions & PEXT_SOUNDDBL))
-		sound_num = MSG_ReadShort();
-	else
-		sound_num = MSG_ReadByte ();
-
-	if (flags & Q2SND_VOLUME)
-		volume = MSG_ReadByte () / 255.0;
-	else
-		volume = Q2DEFAULT_SOUND_PACKET_VOLUME;
-
-	if (flags & Q2SND_ATTENUATION)
-		attenuation = MSG_ReadByte () / 64.0;
-	else
-		attenuation = Q2DEFAULT_SOUND_PACKET_ATTENUATION;
-
-	if (flags & Q2SND_OFFSET)
-		ofs = MSG_ReadByte () / 1000.0;
-	else
-		ofs = 0;
-
-	if (flags & Q2SND_ENT)
-	{	// entity reletive
-		channel = MSG_ReadShort();
-		ent = channel>>3;
-		if (ent > MAX_EDICTS)
-			Host_EndGame ("CL_ParseStartSoundPacket: ent = %i", ent);
-
-		channel &= 7;
-	}
-	else
-	{
-		ent = 0;
-		channel = 0;
-	}
-
-	if (flags & Q2SND_POS)
-	{	// positioned in space
-		if ((flags & Q2SND_LARGEPOS) && (cls.fteprotocolextensions & PEXT_FLOATCOORDS))
-		{
-			pos_v[0] = MSG_ReadFloat();
-			pos_v[1] = MSG_ReadFloat();
-			pos_v[2] = MSG_ReadFloat();
-		}
-		else
-			MSG_ReadPos (pos_v);
-
-		pos = pos_v;
-	}
-	else	// use entity number
-	{
-		CL_GetNumberedEntityInfo(ent, pos_v, NULL);
-		pos = pos_v;
-//		pos = NULL;
-	}
-
-	if (!cl.sound_precache[sound_num])
-		return;
-
-	sfx = cl.sound_precache[sound_num];
-	if (sfx->name[0] == '*')
-	{	//a 'sexed' sound
-		if (ent > 0 && ent <= MAX_CLIENTS)
-		{
-			char *model = InfoBuf_ValueForKey(&cl.players[ent-1].userinfo, "skin");
-			char *skin;
-			skin = strchr(model, '/');
-			if (skin)
-				*skin = '\0';
-			if (*model)
-				sfx = S_PrecacheSound(va("players/%s/%s", model, cl.sound_precache[sound_num]->name+1));
-		}
-		//fall back to male if it failed to load.
-		//note: threaded loading can still make it silent the first time we hear it.
-		if (sfx->loadstate == SLS_FAILED)
-			sfx = S_PrecacheSound(va("players/male/%s", cl.sound_precache[sound_num]->name+1));
-	}
-	S_StartSound (ent, channel, sfx, pos, NULL, volume, attenuation, ofs, 0, 0);
-}
 #endif
 
 #if defined(NQPROT) || defined(PEXT_SOUNDDBL)

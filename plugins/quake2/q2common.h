@@ -102,5 +102,7 @@ void RQ2_DrawNameTags(vec3_t org, vec3_t diff, vec3_t screenspace,
 	int (*DrawTextField)(int x, int y, int w, int h, const char *text, unsigned int defaultmask, unsigned int fieldflags, struct font_s *font, vec2_t fontscale));
 
 void SVQ2_ClientProtocolExtensionsChanged(client_t *client);
+void CLQ2_GetNumberedEntityInfo (int num, float *org, float *ang);
+
 
 #endif //Q2COMMON_H
