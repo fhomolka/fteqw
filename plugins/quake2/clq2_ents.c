@@ -1997,8 +1997,6 @@ static void CLQ2_AddPacketEntities (q2frame_t *frame)
 				ent.angles[i] = LerpAngle (a2, a1, cl.lerpfrac);
 			}
 		}
-		cvar_t r_meshpitch = cvarfuncs->GetNVFDG("r_meshpitch", NULL, 0, NULL, NULL);
-		cvar_t r_meshroll = cvarfuncs->GetNVFDG("r_meshroll", NULL, 0, NULL, NULL);
 
 		ent.angles[0]*=r_meshpitch.value;	//q2 has it fixed. consistency...
 		ent.angles[2]*=r_meshroll.value;	//h2 doesn't. consistency...
