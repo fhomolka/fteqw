@@ -729,7 +729,7 @@ static void VARGS PFQ2_setmodel (q2edict_t *ent, const char *name)
 	if (name[0] == '*')
 	{
 		//mod = Mod_FindName (Mod_FixName(name, sv.modelname));
-		Imodelfuncs->BeginSubmodelLoad(Iworldfuncs->FixName(name, sv.modelname));
+		mod = Imodelfuncs->BeginSubmodelLoad(Iworldfuncs->FixName(name, sv.modelname));
 		if (mod->loadstate == MLS_LOADING)
 			COM_WorkerPartialSync(mod, &mod->loadstate, MLS_LOADING);	//wait for it if needed
 		VectorCopy (mod->mins, ent->mins);
