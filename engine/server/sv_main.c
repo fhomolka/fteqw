@@ -5670,7 +5670,7 @@ float SV_Frame (void)
 
 
 #ifdef Q2SERVER
-		if (q2)
+		if (q2 && q2->sv.HasGameExport())
 			q2->sv.ClearEvents();
 #endif
 		idletime = 0;

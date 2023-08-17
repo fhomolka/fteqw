@@ -631,7 +631,7 @@ void SV_UnspawnServer (void)	//terminate the running server.
 			q3->sv.ShutdownGame(false);
 #endif
 #ifdef Q2SERVER
-		if(q2)
+		if(q2 && q2->sv.HasGameExport())
 		{
 			q2->sv.ShutdownGameProgs();
 			q2->sv.Ents_Shutdown();

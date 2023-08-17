@@ -1066,7 +1066,7 @@ void SV_Map_f (void)
 	else if (startspot && !isrestart && !newunit)
 	{
 #ifdef Q2SERVER
-		if (q2)
+		if (q2 && q2->sv.HasGameExport())
 		{
 			qboolean savedinuse[MAX_CLIENTS];
 			for (i=0 ; i<sv.allocated_client_slots; i++)
@@ -3306,7 +3306,7 @@ static void SV_SendGameCommand_f(void)
 		return;
 
 #ifdef Q2SERVER
-	if (q2)
+	if (q2 && q2->sv.HasGameExport())
 	{
 		q2->sv.ServerCommand();
 	}

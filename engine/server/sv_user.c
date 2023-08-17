@@ -2160,7 +2160,7 @@ void SV_DespawnClient(client_t *cl)
 	cl->spawned = false;
 
 #ifdef Q2SERVER
-	if (q2)
+	if (q2 && q2->sv.HasGameExport())
 	{
 		q2->sv.ClientDisconnect(cl->q2edict);
 		return;
@@ -2242,7 +2242,7 @@ void SV_Begin_Core(client_t *split)
 	split->spawned = true;
 
 #ifdef Q2SERVER
-	if (q2)
+	if (q2 && q2->sv.HasGameExport())
 	{
 		char userinfo[8192];
 		InfoBuf_ToString(&split->userinfo, userinfo, sizeof(userinfo), NULL, NULL, NULL, NULL, NULL);

@@ -61,7 +61,7 @@ void SV_SavegameComment (char *text, size_t textsize)
 
 	kills[0] = '\0';
 #ifdef Q2SERVER
-	if (q2)	//q2
+	if (q2 && q2->sv.HasGameExport())	//q2
 	{
 		kills[0] = '\0';
 	}
@@ -980,7 +980,7 @@ void SV_SaveLevelCache(const char *savedir, qboolean dontharmgame)
 		Con_TPrintf ("Saving game to %s...\n", name);
 
 #ifdef Q2SERVER
-	if (q2)
+	if (q2 && q2->sv.HasGameExport())
 	{
 		char	syspath[256];
 
@@ -1412,7 +1412,7 @@ void SV_Savegame (const char *savename, qboolean mapchange)
 
 #ifdef Q2SERVER
 	//save the player's inventory and other map-persistant state that is owned by the gamecode.
-	if (q2)
+	if (q2 && q2->sv.HasGameExport())
 	{
 		char syspath[256];
 		if (!FS_NativePath(va("saves/%s/game.gsv", savename), FS_GAMEONLY, syspath, sizeof(syspath)))
@@ -2345,7 +2345,7 @@ qboolean SV_Loadgame (const char *unsafe_savename)
 		else
 		{
 			q2->sv.InitGameProgs();
-			if (q2)
+			if (q2 && q2->sv.HasGameExport())
 				q2->sv.ReadGame(loc.rawname);
 		}
 	}
