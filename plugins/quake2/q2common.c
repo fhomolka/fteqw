@@ -95,12 +95,12 @@ qboolean SVQ2_HasGameExport(void)
 	return false;
 }
 
-void ClientCommand(q2edict_t *ent)
+void SVQ2_ClientCommand(q2edict_t *ent)
 {
 	ge->ClientCommand(host_client->q2edict);
 }
 
-q2edict_t *UpdateClientNum(int num)
+q2edict_t *SVQ2_UpdateClientNum(int num)
 {
 	q2edict_t* q2ent;
 	q2ent = Q2EDICT_NUM(num);
@@ -108,23 +108,23 @@ q2edict_t *UpdateClientNum(int num)
 	return q2ent;
 }
 
-void SpawnEntities (char *mapname, char *entities, char *spawnpoint)
+void SVQ2_SpawnEntities (char *mapname, char *entities, char *spawnpoint)
 {
 	ge->SpawnEntities(mapname, entities, spawnpoint);
 }
 
-void ClientDisconnect(q2edict_t *ent)
+void SVQ2_ClientDisconnect(q2edict_t *ent)
 {
 	ge->ClientDisconnect(ent);
 }
 
-qboolean ClientConnect (q2edict_t *ent, char *userinfo)
+qboolean SVQ2_ClientConnect (q2edict_t *ent, char *userinfo)
 {
 	return ge->ClientConnect(ent, userinfo);
 }
 
 
-void ClientUserinfoChanged (q2edict_t *ent, char *userinfo)
+void SVQ2_ClientUserInfoChanged (q2edict_t *ent, char *userinfo)
 {
 	ge->ClientUserinfoChanged(ent, userinfo);
 }
@@ -191,12 +191,12 @@ void SVQ2_WriteGame(char *filename, qboolean autosave)
 	ge->WriteGame(filename, autosave);
 }
 
-void ReadLevel (char *filename)
+void SVQ2_ReadLevel (char *filename)
 {
 	ge->ReadLevel(filename);
 }
 
-void ReadGame (char *filename)
+void SVQ2_ReadGame (char *filename)
 {
 	ge->ReadGame(filename);
 }
@@ -261,12 +261,12 @@ static struct q2gamecode_s q2funcs =
 		SVQ2_RunFrame,
 		WorldQ2_ClearWorld_Nodes,
 		SVQ2_HasGameExport,
-		ClientCommand,
-		UpdateClientNum,
-		SpawnEntities,
-		ClientDisconnect,
-		ClientConnect,
-		ClientUserinfoChanged,
+		SVQ2_ClientCommand,
+		SVQ2_UpdateClientNum,
+		SVQ2_SpawnEntities,
+		SVQ2_ClientDisconnect,
+		SVQ2_ClientConnect,
+		SVQ2_ClientUserInfoChanged,
 		SVQ2_ClientThink,
 		SVQ2_ClientBegin,
 		SVQ2_CalcPing,
@@ -275,8 +275,8 @@ static struct q2gamecode_s q2funcs =
 		SVQ2_ClientProtocolExtensionsChanged,
 		SVQ2_WriteLevel,
 		SVQ2_WriteGame,
-		ReadLevel,
-		ReadGame,
+		SVQ2_ReadLevel,
+		SVQ2_ReadGame,
 		EdictFromNum,
 		NumFromEdict,
 	},
