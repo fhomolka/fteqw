@@ -2,6 +2,9 @@
 #include "q2common.h"
 #include "clq2defs.h"
 
+cvar_t *cvar_r_meshpitch;
+cvar_t *cvar_r_meshroll;
+
 plugworldfuncs_t	*Iworldfuncs;
 plugmsgfuncs_t		*Imsgfuncs;
 plugmodfuncs_t 		*Imodelfuncs;
@@ -296,6 +299,9 @@ qboolean Plug_Init(void)
 		Con_Printf("Engine is already using a q2-derived gamecode plugin.\n");
 		return false;
 	}
+
+	cvar_r_meshpitch = cvarfuncs->GetNVFDG("r_meshpitch", NULL, 0, NULL, NULL);
+	cvar_r_meshroll = cvarfuncs->GetNVFDG("r_meshroll", NULL, 0, NULL, NULL);
 
 	Iworldfuncs = plugfuncs->GetEngineInterface(plugworldfuncs_name, sizeof(*Iworldfuncs));
 	Imsgfuncs = plugfuncs->GetEngineInterface(plugmsgfuncs_name, sizeof(*Imsgfuncs));
