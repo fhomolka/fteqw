@@ -98,7 +98,7 @@ typedef struct q2centity_s
 	float		fly_stoptime;
 } q2centity_t;
 
-static void Q2S_StartSound(vec3_t origin, int entnum, int entchannel, sfx_t *sfx, float fvol, float attenuation, float delay)
+void Q2S_StartSound(vec3_t origin, int entnum, int entchannel, sfx_t *sfx, float fvol, float attenuation, float delay)
 {
 	Iaudiofuncs->StartSound(entnum, entchannel, sfx, origin, NULL, fvol, attenuation, -delay, 0, 0);
 }
@@ -216,12 +216,12 @@ entity_state_t	clq2_parse_entities[MAX_PARSE_ENTITIES];
 
 void CL_SmokeAndFlash(vec3_t origin);
 
-void CL_GetNumberedEntityInfo (int num, float *org, float *ang)
+void CLQ2_GetNumberedEntityInfo (int num, float *org, float *ang)
 {
 	q2centity_t	*ent;
 
 	if (num < 0 || num >= MAX_Q2EDICTS)
-		Host_EndGame ("CL_GetNumberedEntityInfo: bad ent");
+		plugfuncs->EndGame ("CLQ2_GetNumberedEntityInfo: bad ent");
 	ent = &cl_entities[num];
 
 	if (org)
@@ -268,7 +268,7 @@ void CLQ2_WriteDemoBaselines(sizebuf_t *buf)
 			SZ_Clear (buf);
 		}
 
-		MSG_WriteByte (buf, svcq2_spawnbaseline);
+		Imsgfuncs->WriteByte (buf, svcq2_spawnbaseline);
 		MSGQ2_WriteDeltaEntity(&nullstate, &es, buf, true, true);
 	}
 }
@@ -674,13 +674,13 @@ void CLQ2_ParseMuzzleFlash (void)
 
 	i = (unsigned short)(short)MSG_ReadShort ();
 	if (i < 1 || i >= Q2MAX_EDICTS)
-		Host_Error ("CL_ParseMuzzleFlash: bad entity");
+		plugfuncs->Error ("CLQ2_ParseMuzzleFlash: bad entity");
 
-	weapon = MSG_ReadByte ();
+	weapon = Imsgfuncs->ReadByte ();
 	silenced = weapon & Q2MZ_SILENCED;
 	weapon &= ~Q2MZ_SILENCED;
 
-	CL_GetNumberedEntityInfo(i, org, ang);
+	CLQ2_GetNumberedEntityInfo(i, org, ang);
 
 	dl = CL_AllocDlight (i);
 	VectorCopy (org,  dl->origin);
@@ -709,115 +709,115 @@ void CLQ2_ParseMuzzleFlash (void)
 	{
 	case Q2MZ_BLASTER:
 		dl->color[0] = 1;dl->color[1] = 1;dl->color[2] = 0;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/blastf1a.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/blastf1a.wav"), volume, ATTN_NORM, 0);
 		break;
 	case Q2MZ_BLUEHYPERBLASTER:
 		dl->color[0] = 0;dl->color[1] = 0;dl->color[2] = 1;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/hyprbf1a.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/hyprbf1a.wav"), volume, ATTN_NORM, 0);
 		break;
 	case Q2MZ_HYPERBLASTER:
 		dl->color[0] = 1;dl->color[1] = 1;dl->color[2] = 0;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/hyprbf1a.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON,Iaudiofuncs->PrecacheSound("weapons/hyprbf1a.wav"), volume, ATTN_NORM, 0);
 		break;
 	case Q2MZ_MACHINEGUN:
 		dl->color[0] = 1;dl->color[1] = 1;dl->color[2] = 0;
 		Q_snprintfz(soundname, sizeof(soundname), "weapons/machgf%ib.wav", (rand() % 5) + 1);
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound(soundname), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound(soundname), volume, ATTN_NORM, 0);
 		break;
 
 	case Q2MZ_SHOTGUN:
 		dl->color[0] = 1;dl->color[1] = 1;dl->color[2] = 0;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/shotgf1b.wav"), volume, ATTN_NORM, 0);
-		Q2S_StartSound (NULL, i, CHAN_AUTO,   S_PrecacheSound("weapons/shotgr1b.wav"), volume, ATTN_NORM, 0.1);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/shotgf1b.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_AUTO,   Iaudiofuncs->PrecacheSound("weapons/shotgr1b.wav"), volume, ATTN_NORM, 0.1);
 		break;
 	case Q2MZ_SSHOTGUN:
 		dl->color[0] = 1;dl->color[1] = 1;dl->color[2] = 0;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/sshotf1b.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/sshotf1b.wav"), volume, ATTN_NORM, 0);
 		break;
 	case Q2MZ_CHAINGUN1:
 		dl->radius = 200 + (rand()&31);
 		dl->color[0] = 1;dl->color[1] = 0.25;dl->color[2] = 0;
 		Q_snprintfz(soundname, sizeof(soundname), "weapons/machgf%ib.wav", (rand() % 5) + 1);
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound(soundname), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound(soundname), volume, ATTN_NORM, 0);
 		break;
 	case Q2MZ_CHAINGUN2:
 		dl->radius = 225 + (rand()&31);
 		dl->color[0] = 1;dl->color[1] = 0.5;dl->color[2] = 0;
 		dl->die = cl.time  + 0.1;	// long delay
 		Q_snprintfz(soundname, sizeof(soundname), "weapons/machgf%ib.wav", (rand() % 5) + 1);
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound(soundname), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound(soundname), volume, ATTN_NORM, 0);
 		Q_snprintfz(soundname, sizeof(soundname), "weapons/machgf%ib.wav", (rand() % 5) + 1);
-		Q2S_StartSound (NULL, i, CHAN_AUTO, S_PrecacheSound(soundname), volume, ATTN_NORM, 0.05);
+		Q2S_StartSound (NULL, i, CHAN_AUTO, Iaudiofuncs->PrecacheSound(soundname), volume, ATTN_NORM, 0.05);
 		break;
 	case Q2MZ_CHAINGUN3:
 		dl->radius = 250 + (rand()&31);
 		dl->color[0] = 1;dl->color[1] = 1;dl->color[2] = 0;
 		dl->die = cl.time  + 0.1;	// long delay
 		Q_snprintfz(soundname, sizeof(soundname), "weapons/machgf%ib.wav", (rand() % 5) + 1);
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound(soundname), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound(soundname), volume, ATTN_NORM, 0);
 		Q_snprintfz(soundname, sizeof(soundname), "weapons/machgf%ib.wav", (rand() % 5) + 1);
-		Q2S_StartSound (NULL, i, CHAN_AUTO, S_PrecacheSound(soundname), volume, ATTN_NORM, 0.033);
+		Q2S_StartSound (NULL, i, CHAN_AUTO, Iaudiofuncs->PrecacheSound(soundname), volume, ATTN_NORM, 0.033);
 		Q_snprintfz(soundname, sizeof(soundname), "weapons/machgf%ib.wav", (rand() % 5) + 1);
-		Q2S_StartSound (NULL, i, CHAN_AUTO, S_PrecacheSound(soundname), volume, ATTN_NORM, 0.066);
+		Q2S_StartSound (NULL, i, CHAN_AUTO, Iaudiofuncs->PrecacheSound(soundname), volume, ATTN_NORM, 0.066);
 		break;
 
 	case Q2MZ_RAILGUN:
 		dl->color[0] = 0.5;dl->color[1] = 0.5;dl->color[2] = 1;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/railgf1a.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/railgf1a.wav"), volume, ATTN_NORM, 0);
 		break;
 	case Q2MZ_ROCKET:
 		dl->color[0] = 1;dl->color[1] = 0.5;dl->color[2] = 0.2;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/rocklf1a.wav"), volume, ATTN_NORM, 0);
-		Q2S_StartSound (NULL, i, CHAN_AUTO,   S_PrecacheSound("weapons/rocklr1b.wav"), volume, ATTN_NORM, 0.1);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/rocklf1a.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_AUTO,   Iaudiofuncs->PrecacheSound("weapons/rocklr1b.wav"), volume, ATTN_NORM, 0.1);
 		break;
 	case Q2MZ_GRENADE:
 		dl->color[0] = 1;dl->color[1] = 0.5;dl->color[2] = 0;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/grenlf1a.wav"), volume, ATTN_NORM, 0);
-		Q2S_StartSound (NULL, i, CHAN_AUTO,   S_PrecacheSound("weapons/grenlr1b.wav"), volume, ATTN_NORM, 0.1);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/grenlf1a.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_AUTO,   Iaudiofuncs->PrecacheSound("weapons/grenlr1b.wav"), volume, ATTN_NORM, 0.1);
 		break;
 	case Q2MZ_BFG:
 		dl->color[0] = 0;dl->color[1] = 1;dl->color[2] = 0;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/bfg__f1y.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/bfg__f1y.wav"), volume, ATTN_NORM, 0);
 		break;
 
 	case Q2MZ_LOGIN:
 		dl->color[0] = 0;dl->color[1] = 1; dl->color[2] = 0;
 		dl->die = cl.time + 1.0;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/grenlf1a.wav"), 1, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/grenlf1a.wav"), 1, ATTN_NORM, 0);
 //		CL_LogoutEffect (pl->current.origin, weapon);
 		break;
 	case Q2MZ_LOGOUT:
 		dl->color[0] = 1;dl->color[1] = 0; dl->color[2] = 0;
 		dl->die = cl.time + 1.0;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/grenlf1a.wav"), 1, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/grenlf1a.wav"), 1, ATTN_NORM, 0);
 //		CL_LogoutEffect (pl->current.origin, weapon);
 		break;
 	case Q2MZ_RESPAWN:
 		dl->color[0] = 1;dl->color[1] = 1; dl->color[2] = 0;
 		dl->die = cl.time + 1.0;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/grenlf1a.wav"), 1, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/grenlf1a.wav"), 1, ATTN_NORM, 0);
 //		CL_LogoutEffect (pl->current.origin, weapon);
 		break;
 	// RAFAEL
 	case Q2MZ_PHALANX:
 		dl->color[0] = 1;dl->color[1] = 0.5; dl->color[2] = 0.5;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/plasshot.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/plasshot.wav"), volume, ATTN_NORM, 0);
 		break;
 	// RAFAEL
 	case Q2MZ_IONRIPPER:
 		dl->color[0] = 1;dl->color[1] = 0.5; dl->color[2] = 0.5;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/rippfire.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/rippfire.wav"), volume, ATTN_NORM, 0);
 		break;
 
 // ======================
 // PGM
 	case Q2MZ_ETF_RIFLE:
 		dl->color[0] = 0.9;dl->color[1] = 0.7;dl->color[2] = 0;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/nail1.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/nail1.wav"), volume, ATTN_NORM, 0);
 		break;
 	case Q2MZ_SHOTGUN2:
 		dl->color[0] = 1;dl->color[1] = 1;dl->color[2] = 0;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/shotg2.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/shotg2.wav"), volume, ATTN_NORM, 0);
 		break;
 	case Q2MZ_HEATBEAM:
 		dl->color[0] = 1;dl->color[1] = 1;dl->color[2] = 0;
@@ -827,12 +827,12 @@ void CLQ2_ParseMuzzleFlash (void)
 	case Q2MZ_BLASTER2:
 		dl->color[0] = 0;dl->color[1] = 1;dl->color[2] = 0;
 		// FIXME - different sound for blaster2 ??
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/blastf1a.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/blastf1a.wav"), volume, ATTN_NORM, 0);
 		break;
 	case Q2MZ_TRACKER:
 		// negative flashes handled the same in gl/soft until CL_AddDLights
 		dl->color[0] = -1;dl->color[1] = -1;dl->color[2] = -1;
-		Q2S_StartSound (NULL, i, CHAN_WEAPON, S_PrecacheSound("weapons/disint2.wav"), volume, ATTN_NORM, 0);
+		Q2S_StartSound (NULL, i, CHAN_WEAPON, Iaudiofuncs->PrecacheSound("weapons/disint2.wav"), volume, ATTN_NORM, 0);
 		break;
 	case Q2MZ_NUKE1:
 		dl->color[0] = 1;dl->color[1] = 0;dl->color[2] = 0;
@@ -860,11 +860,11 @@ void CLQ2_ParseMuzzleFlash2 (void)
 	int			ent;
 	int			flash_number;
 
-	ent = (unsigned short)(short)MSG_ReadShort ();
+	ent = (unsigned short)(short)Imsgfuncs->ReadShort ();
 	if (ent < 1 || ent >= Q2MAX_EDICTS)
 		Host_EndGame ("CL_ParseMuzzleFlash2: bad entity");
 
-	flash_number = MSG_ReadByte ();
+	flash_number = Imsgfuncs->ReadByte ();
 
 	CLQ2_RunMuzzleFlash2(ent, flash_number);
 }
@@ -873,7 +873,7 @@ void CLQ2_ParseInventory (int seat)
 {
 	unsigned int		i;
 	for (i=0 ; i<Q2MAX_ITEMS ; i++)
-		cl.inventory[seat][i] = MSG_ReadShort ();
+		cl.inventory[seat][i] = Imsgfuncs->ReadShort ();
 }
 
 /*
@@ -898,20 +898,20 @@ static int CLQ2_ParseEntityBits (unsigned int *bits)
 //	int			i;
 	int			number;
 
-	total = MSG_ReadByte ();
+	total = Imsgfuncs->ReadByte ();
 	if (total & Q2U_MOREBITS1)
 	{
-		b = MSG_ReadByte ();
+		b = Imsgfuncs->ReadByte ();
 		total |= b<<8;
 	}
 	if (total & Q2U_MOREBITS2)
 	{
-		b = MSG_ReadByte ();
+		b = Imsgfuncs->ReadByte ();
 		total |= b<<16;
 	}
 	if (total & Q2U_MOREBITS3)
 	{
-		b = MSG_ReadByte ();
+		b = Imsgfuncs->ReadByte ();
 		total |= b<<24;
 	}
 
@@ -921,9 +921,9 @@ static int CLQ2_ParseEntityBits (unsigned int *bits)
 			bitcounts[i]++;
 */
 	if (total & Q2U_NUMBER16)
-		number = (unsigned short)MSG_ReadShort ();
+		number = (unsigned short)Imsgfuncs->ReadShort ();
 	else
-		number = MSG_ReadByte ();
+		number = Imsgfuncs->ReadByte ();
 
 	*bits = total;
 
@@ -948,82 +948,82 @@ static void CLQ2_ParseDelta (entity_state_t *from, entity_state_t *to, int numbe
 	if (bits & Q2U_MODEL)
 	{
 		if (bits & Q2UX_INDEX16)
-			to->modelindex = MSG_ReadShort();
+			to->modelindex = Imsgfuncs->ReadShort();
 		else
-			to->modelindex = MSG_ReadByte ();
+			to->modelindex = Imsgfuncs->ReadByte ();
 	}
 	if (bits & Q2U_MODEL2)
 	{
 		if (bits & Q2UX_INDEX16)
-			to->modelindex2 = MSG_ReadShort();
+			to->modelindex2 = Imsgfuncs->ReadShort();
 		else
-			to->modelindex2 = MSG_ReadByte ();
+			to->modelindex2 = Imsgfuncs->ReadByte ();
 	}
 	if (bits & Q2U_MODEL3)
 	{
 		if (bits & Q2UX_INDEX16)
-			to->u.q2.modelindex3 = MSG_ReadShort();
+			to->u.q2.modelindex3 = Imsgfuncs->ReadShort();
 		else
-			to->u.q2.modelindex3 = MSG_ReadByte ();
+			to->u.q2.modelindex3 = Imsgfuncs->ReadByte ();
 	}
 	if (bits & Q2U_MODEL4)
 	{
 		if (bits & Q2UX_INDEX16)
-			to->u.q2.modelindex4 = MSG_ReadShort();
+			to->u.q2.modelindex4 = Imsgfuncs->ReadShort();
 		else
-			to->u.q2.modelindex4 = MSG_ReadByte ();
+			to->u.q2.modelindex4 = Imsgfuncs->ReadByte ();
 	}
 		
 	if (bits & Q2U_FRAME8)
-		to->frame = MSG_ReadByte ();
+		to->frame = Imsgfuncs->ReadByte ();
 	if (bits & Q2U_FRAME16)
-		to->frame = MSG_ReadUInt16();
+		to->frame = Imsgfuncs->ReadUInt16();
 
 	if ((bits & Q2U_SKIN8) && (bits & Q2U_SKIN16))		//used for laser colors
-		to->skinnum = MSG_ReadLong();
+		to->skinnum = Imsgfuncs->ReadLong();
 	else if (bits & Q2U_SKIN8)
-		to->skinnum = MSG_ReadByte();
+		to->skinnum = Imsgfuncs->ReadByte();
 	else if (bits & Q2U_SKIN16)
-		to->skinnum = MSG_ReadUInt16();
+		to->skinnum = Imsgfuncs->ReadUInt16();
 
 	if ( (bits & (Q2U_EFFECTS8|Q2U_EFFECTS16)) == (Q2U_EFFECTS8|Q2U_EFFECTS16) )
-		to->effects = MSG_ReadLong();
+		to->effects = Imsgfuncs->ReadLong();
 	else if (bits & Q2U_EFFECTS8)
-		to->effects = MSG_ReadByte();
+		to->effects = Imsgfuncs->ReadByte();
 	else if (bits & Q2U_EFFECTS16)
-		to->effects = MSG_ReadUInt16();
+		to->effects = Imsgfuncs->ReadUInt16();
 
 	if ( (bits & (Q2U_RENDERFX8|Q2U_RENDERFX16)) == (Q2U_RENDERFX8|Q2U_RENDERFX16) )
-		to->u.q2.renderfx = MSG_ReadLong() & 0x0007ffff;	//only the standard ones actually supported by vanilla q2.
+		to->u.q2.renderfx = Imsgfuncs->ReadLong() & 0x0007ffff;	//only the standard ones actually supported by vanilla q2.
 	else if (bits & Q2U_RENDERFX8)
-		to->u.q2.renderfx = MSG_ReadByte();
+		to->u.q2.renderfx = Imsgfuncs->ReadByte();
 	else if (bits & Q2U_RENDERFX16)
-		to->u.q2.renderfx = MSG_ReadUInt16();
+		to->u.q2.renderfx = Imsgfuncs->ReadUInt16();
 
 	if (bits & Q2U_ORIGIN1)
-		to->origin[0] = MSG_ReadCoord ();
+		to->origin[0] = Imsgfuncs->ReadCoord ();
 	if (bits & Q2U_ORIGIN2)
-		to->origin[1] = MSG_ReadCoord ();
+		to->origin[1] = Imsgfuncs->ReadCoord ();
 	if (bits & Q2U_ORIGIN3)
-		to->origin[2] = MSG_ReadCoord ();
+		to->origin[2] = Imsgfuncs->ReadCoord ();
 	
 	if ((bits & Q2UX_ANGLE16) && (net_message.prim.flags & NPQ2_ANG16))
 	{
 		if (bits & Q2U_ANGLE1)
-			to->angles[0] = MSG_ReadAngle16();
+			to->angles[0] = Imsgfuncs->ReadAngle16();
 		if (bits & Q2U_ANGLE2)
-			to->angles[1] = MSG_ReadAngle16();
+			to->angles[1] = Imsgfuncs->ReadAngle16();
 		if (bits & Q2U_ANGLE3)
-			to->angles[2] = MSG_ReadAngle16();
+			to->angles[2] = Imsgfuncs->ReadAngle16();
 	}
 	else
 	{
 		if (bits & Q2U_ANGLE1)
-			to->angles[0] = MSG_ReadAngle();
+			to->angles[0] = Imsgfuncs->ReadAngle();
 		if (bits & Q2U_ANGLE2)
-			to->angles[1] = MSG_ReadAngle();
+			to->angles[1] = Imsgfuncs->ReadAngle();
 		if (bits & Q2U_ANGLE3)
-			to->angles[2] = MSG_ReadAngle();
+			to->angles[2] = Imsgfuncs->ReadAngle();
 	}
 
 	if (bits & Q2U_OLDORIGIN)
@@ -1032,20 +1032,20 @@ static void CLQ2_ParseDelta (entity_state_t *from, entity_state_t *to, int numbe
 	if (bits & Q2U_SOUND)
 	{
 		if (bits & Q2UX_INDEX16)
-			to->u.q2.sound = MSG_ReadUInt16();
+			to->u.q2.sound = Imsgfuncs->ReadUInt16();
 		else
-			to->u.q2.sound = MSG_ReadByte ();
+			to->u.q2.sound = Imsgfuncs->ReadByte ();
 	}
 
 	if (bits & Q2U_EVENT)
-		to->u.q2.event = MSG_ReadByte ();
+		to->u.q2.event = Imsgfuncs->ReadByte ();
 	else
 		to->u.q2.event = 0;
 
 	if (bits & Q2U_SOLID)
 	{
 		if (net_message.prim.flags & NPQ2_SOLID32)
-			to->solidsize = MSG_ReadLong();
+			to->solidsize = Imsgfuncs->ReadLong();
 		else
 			to->solidsize = MSG_ReadSize16 (&net_message);
 	}
@@ -1167,7 +1167,7 @@ static void CLQ2_ParsePacketEntities (q2frame_t *oldframe, q2frame_t *newframe)
 		if (newnum >= MAX_Q2EDICTS)
 			Host_EndGame ("CL_ParsePacketEntities: bad number:%i", newnum);
 
-		if (MSG_GetReadCount() > net_message.cursize)
+		if (Imsgfuncs->ReadCount() > net_message.cursize)
 			Host_EndGame ("CL_ParsePacketEntities: end of message");
 
 		if (!newnum)
