@@ -1256,6 +1256,11 @@ static void Model_CheckDownloads (void)
 #endif
 }
 
+void TEMPQ2_Model_CheckDownloads()
+{
+	Model_CheckDownloads();
+}
+
 static int CL_LoadModels(int stage, qboolean dontactuallyload)
 {
 	int i;
@@ -1645,6 +1650,11 @@ static void Sound_CheckDownloads (void)
 	{
 		Sound_CheckDownload(cl.sound_name[i]);
 	}
+}
+
+void TEMPQ2_Sound_CheckDownloads(void)
+{
+	Sound_CheckDownloads();
 }
 
 /*
@@ -2452,6 +2462,11 @@ static void CL_ParseChunkedDownload(qdownload_t *dl)
 
 	if (dl->completedbytes == dl->size)
 		CL_DownloadFinished(dl);
+}
+
+void TEMP_CLQ2_ParseChunkedDownload(qdownload_t *dl)
+{
+	CL_ParseChunkedDownload(dl);
 }
 
 static int CL_CountQueuedDownloads(void)
@@ -4429,219 +4444,6 @@ static void CL_ParseModellist (qboolean lots)
 	cl.sendprespawn = true;
 }
 
-#ifdef Q2CLIENT
-static void CLQ2_ParseClientinfo(int i, char *s)
-{
-	char *model, *name;
-	player_info_t *player;
-	//s contains "name\model/skin"
-	//q2 doesn't really do much with userinfos.
-
-	if (i >= MAX_CLIENTS)
-		return;
-
-	player = &cl.players[i];
-
-	InfoBuf_Clear(&player->userinfo, true);
-	cl.players[i].userinfovalid = true;
-
-	model = strchr(s, '\\');
-	if (model)
-	{
-		*model = '\0';
-		model++;
-		name = s;
-	}
-	else
-	{
-		name = "Unnammed";
-		model = "male";
-	}
-#if 0
-	skin = strchr(model, '/');
-	if (skin)
-	{
-		*skin = '\0';
-		skin++;
-	}
-	else
-		skin = "";
-	InfoBuf_SetValueForKey(&player->userinfo, "model", model);
-	InfoBuf_SetValueForKey(&player->userinfo, "skin", skin);
-#else
-	InfoBuf_SetValueForKey(&player->userinfo, "skin", model);
-#endif
-	InfoBuf_SetValueForKey(&player->userinfo, "name", name);
-
-	cl.players[i].userid = i;
-	cl.players[i].rbottomcolor = 1;
-	cl.players[i].rtopcolor = 1;
-	CL_ProcessUserInfo (i, player);
-}
-
-static void CLQ2_ParseConfigString (void)
-{
-	unsigned int		i;
-	char	*s;
-//	char	olds[MAX_QPATH];
-
-	i = (unsigned short)MSG_ReadShort ();
-	s = MSG_ReadString();
-
-	if (i >= 0x8000 && i < 0x8000+MAX_PRECACHE_MODELS)
-	{
-		if (*s == '/')
-			s++;	//*sigh*
-		Q_strncpyz(cl.model_name[i-0x8000], s, MAX_QPATH);
-		if (cl.model_name[i-0x8000][0] == '#')
-		{
-			if (cl.numq2visibleweapons < Q2MAX_VISIBLE_WEAPONS)
-			{
-				cl.q2visibleweapons[cl.numq2visibleweapons] = cl.model_name[i-0x8000]+1;
-				cl.numq2visibleweapons++;
-			}
-			cl.model_precache[i-0x8000] = NULL;
-		}
-		else if (cl.contentstage)
-			cl.model_precache[i-0x8000] = Mod_ForName (cl.model_name[i-0x8000], MLV_WARN);
-		return;
-	}
-	else if (i >= 0xc000 && i < 0xc000+MAX_PRECACHE_SOUNDS)
-	{
-		if (*s == '/')
-			s++;	//*sigh*
-		Q_strncpyz(cl.sound_name[i-0xc000], s, MAX_QPATH);
-		if (cl.contentstage)
-			cl.sound_precache[i-0xc000] = S_PrecacheSound (s);
-		return;
-	}
-
-	if ((unsigned int)i >= Q2MAX_CONFIGSTRINGS)
-		Host_EndGame ("configstring > Q2MAX_CONFIGSTRINGS");
-
-//	strncpy (olds, cl.configstrings[i], sizeof(olds));
-//	olds[sizeof(olds) - 1] = 0;
-
-//	strcpy (cl.configstrings[i], s);
-
-	// do something apropriate
-
-	if (i == Q2CS_NAME)
-	{
-		Q_strncpyz (cl.levelname, s, sizeof(cl.levelname));
-	}
-	else if (i == Q2CS_SKY)
-		R_SetSky(s);
-	else if (i == Q2CS_SKYAXIS || i == Q2CS_SKYROTATE)
-	{
-		if (i == Q2CS_SKYROTATE)
-			cl.skyrotate = atof(s);
-		else
-		{
-			s = COM_Parse(s);
-			if (s)
-			{
-				cl.skyaxis[0] = atof(com_token);
-				s = COM_Parse(s);
-				if (s)
-				{
-					cl.skyaxis[1] = atof(com_token);
-					s = COM_Parse(s);
-					if (s)
-						cl.skyaxis[2] = atof(com_token);
-				}
-			}
-		}
-
-		if (cl.skyrotate)
-		{
-			if (cl.skyaxis[0]||cl.skyaxis[1]||cl.skyaxis[2])
-				Cvar_Set(&r_skybox_orientation, va("%g %g %g %g", cl.skyaxis[0], cl.skyaxis[1], cl.skyaxis[2], cl.skyrotate));
-			else
-				Cvar_Set(&r_skybox_orientation, va("0 0 1 %g", cl.skyrotate));
-		}
-		else
-			Cvar_Set(&r_skybox_orientation, "");
-	}
-	else if (i == Q2CS_STATUSBAR)
-	{
-		Q_strncpyz(cl.q2statusbar, s, sizeof(cl.q2statusbar));
-	}
-	else if (i >= Q2CS_LIGHTS && i < Q2CS_LIGHTS+Q2MAX_LIGHTSTYLES)
-	{
-		R_UpdateLightStyle(i-Q2CS_LIGHTS, s, 1, 1, 1);
-	}
-	else if (i == Q2CS_CDTRACK)
-	{
-		Media_NamedTrack (s, NULL);
-	}
-	else if (i == Q2CS_AIRACCEL)
-		Q_strncpyz(cl.q2airaccel, s, sizeof(cl.q2airaccel));
-	else if (i >= Q2CS_MODELS && i < Q2CS_MODELS+Q2MAX_MODELS)
-	{
-		if (*s == '/')
-			s++;	//*sigh*
-		Q_strncpyz(cl.model_name[i-Q2CS_MODELS], s, MAX_QPATH);
-		if (cl.model_name[i-Q2CS_MODELS][0] == '#')
-		{
-			if (cl.numq2visibleweapons < Q2MAX_VISIBLE_WEAPONS)
-			{
-				cl.q2visibleweapons[cl.numq2visibleweapons] = cl.model_name[i-Q2CS_MODELS]+1;
-				cl.numq2visibleweapons++;
-			}
-			cl.model_precache[i-Q2CS_MODELS] = NULL;
-		}
-		else if (cl.contentstage)
-			cl.model_precache[i-Q2CS_MODELS] = Mod_ForName (cl.model_name[i-Q2CS_MODELS], MLV_WARN);
-	}
-	else if (i >= Q2CS_SOUNDS && i < Q2CS_SOUNDS+Q2MAX_SOUNDS)
-	{
-		if (*s == '/')
-			s++;	//*sigh*
-		Q_strncpyz(cl.sound_name[i-Q2CS_SOUNDS], s, MAX_QPATH);
-		if (cl.contentstage)
-			cl.sound_precache[i-Q2CS_SOUNDS] = S_PrecacheSound (s);
-	}
-	else if (i >= Q2CS_IMAGES && i < Q2CS_IMAGES+Q2MAX_IMAGES)
-	{
-		Z_Free(cl.image_name[i-Q2CS_IMAGES]);
-		cl.image_name[i-Q2CS_IMAGES] = Z_StrDup(s);
-	}
-	else if (i >= Q2CS_ITEMS && i < Q2CS_ITEMS+Q2MAX_ITEMS)
-	{
-		Z_Free(cl.item_name[i-Q2CS_ITEMS]);
-		cl.item_name[i-Q2CS_ITEMS] = Z_StrDup(s);
-	}
-	else if (i >= Q2CS_GENERAL && i < Q2CS_GENERAL+Q2MAX_GENERAL)
-	{
-		Z_Free(cl.configstring_general[i-Q2CS_PLAYERSKINS]);
-		cl.configstring_general[i-Q2CS_PLAYERSKINS] = Z_StrDup(s);
-	}
-	else if (i >= Q2CS_PLAYERSKINS && i < Q2CS_PLAYERSKINS+Q2MAX_CLIENTS)
-	{
-		CLQ2_ParseClientinfo (i-Q2CS_PLAYERSKINS, s);
-		Z_Free(cl.configstring_general[i-Q2CS_PLAYERSKINS]);
-		cl.configstring_general[i-Q2CS_PLAYERSKINS] = Z_StrDup(s);
-	}
-	else if (i == Q2CS_MAPCHECKSUM)
-	{
-		int serverchecksum = (int)strtol(s, NULL, 10);
-		int mapchecksum = 0;
-		if (cl.worldmodel)
-		{
-			if (cl.worldmodel->loadstate == MLS_LOADING)
-				COM_WorkerPartialSync(cl.worldmodel, &cl.worldmodel->loadstate, MLS_LOADING);
-			mapchecksum = cl.worldmodel->checksum;
-
-			// the Q2 client normally exits here, however for our purposes we might as well ignore it
-			if (mapchecksum != serverchecksum)
-				Con_Printf(CON_WARNING "WARNING: Client checksum does not match server checksum (%i != %i)", mapchecksum, serverchecksum);
-		}
-
-		cl.q2mapchecksum = serverchecksum;
-	}
-}
-#endif
 
 
 qboolean CL_CheckBaselines (int size)
@@ -4732,17 +4534,6 @@ static void CL_ParseBaselineDelta (void)
 	memcpy(cl_baselines + es.number, &es, sizeof(es));
 }
 
-#ifdef Q2CLIENT
-static void CLQ2_Precache_f (void)
-{
-	Model_CheckDownloads();
-	Sound_CheckDownloads();
-
-	cl.contentstage = 0;
-	cl.sendprespawn = true;
-	SCR_SetLoadingFile("loading data");
-}
-#endif
 
 
 
@@ -5384,6 +5175,11 @@ static void CL_ProcessUserInfo (int slot, player_info_t *player)
 	Sbar_Changed ();
 
 	CSQC_PlayerInfoChanged(slot);
+}
+
+void TEMP_CLQ2_ProcessUserInfo (int slot, player_info_t *player)
+{
+	CL_ProcessUserInfo(slot, player);
 }
 
 /*
@@ -6377,6 +6173,12 @@ static void CL_ParsePrint(char *msg, int level)
 		memmove(printtext, msg, strlen(msg)+1);
 	}
 }
+
+void TEMP_CLQ2_ParsePrint(char *msg, int level)
+{
+	CL_ParsePrint(msg, level);
+}
+
 
 static void CL_ParseWeaponStats(void)
 {

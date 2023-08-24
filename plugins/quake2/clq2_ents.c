@@ -1525,9 +1525,9 @@ void CLQ2_ParseFrame (int extrabits)
 
 	memset (&cl.q2frame, 0, sizeof(cl.q2frame));
 
-#if 0
-	CLQ2_ClearProjectiles(); // clear projectiles for new frame
-#endif
+
+	CL_ClearProjectiles(); // clear projectiles for new frame
+
 
 	if (cls.protocol_q2 == PROTOCOL_VERSION_R1Q2 || cls.protocol_q2 == PROTOCOL_VERSION_Q2PRO)
 	{

@@ -1,6 +1,411 @@
 #include "q2common.h"
 #include <zlib.h>
 
+
+/*
+=====================
+CLQ2_ParseDownload
+
+A download message has been received from the server
+=====================
+*/
+static void CLQ2_ParseDownload (qboolean zlib)
+{
+	extern cvar_t cl_dlemptyterminate;
+	int		size, percent;
+	qbyte	name[1024];
+	qdownload_t *dl = cls.download;
+
+#ifdef PEXT_CHUNKEDDOWNLOADS
+	if (cls.fteprotocolextensions & PEXT_CHUNKEDDOWNLOADS)
+	{
+		if (cls.demoplayback == DPB_EZTV)
+			plugfuncs->EndGame("CL_ParseDownload: chunked download on qtv proxy.");
+		TEMP_CLQ2_ParseChunkedDownload(dl);
+		return;
+	}
+#endif
+
+	// read the data
+	size = Imsgfuncs->ReadShort ();
+	percent = Imsgfuncs->ReadByte ();
+
+	if (size == -2)
+	{
+		/*quakeforge*/
+		Imsgfuncs->ReadString();
+		return;
+	}
+	if (size == -3)
+	{
+		char *requestedname;
+		Q_strncpyz(name, MSG_ReadString(), sizeof(name));
+		requestedname = MSG_ReadString();
+		Con_DPrintf("Download for %s redirected to %s\n", requestedname, name);
+		/*quakeforge http download redirection*/
+		if (dl)
+			CL_DownloadFailed(dl->remotename, dl, DLFAIL_REDIRECTED);
+		//FIXME: find some safe way to do this and actually test it. we should already know the local name, but we might have gained a .gz or something (this is quakeforge after all).
+//		CL_CheckOrEnqueDownloadFile(name, localname, DLLF_IGNOREFAILED);
+		return;
+	}
+
+	if (cls.demoplayback && cls.demoplayback != DPB_EZTV)
+	{
+		if (size > 0)
+			Imsgfuncs->ReadSkip(size);
+		return; // not in demo playback, we don't know the name of the file.
+	}
+	if (!dl)
+	{
+		//download packet without file requested.
+		if (size > 0)
+			Imsgfuncs->ReadSkip(size);
+		return; // not in demo playback
+	}
+
+	if (size < 0)
+	{
+		Con_TPrintf ("File not found.\n");
+
+		if (dl)
+			CL_DownloadFailed(dl->remotename, dl, DLFAIL_SERVERFILE);
+		return;
+	}
+
+	// open the file if not opened yet
+	if (dl->method == DL_QWPENDING)
+	{
+		dl->method = DL_QW;
+		if (!DL_Begun(dl))
+		{
+			MSG_ReadSkip(size);
+			Con_TPrintf ("Failed to open %s\n", dl->tempname);
+			CL_DownloadFailed(dl->remotename, dl, DLFAIL_CLIENTFILE);
+			CL_RequestNextDownload ();
+			return;
+		}
+		SCR_EndLoadingPlaque();
+	}
+
+	if (zlib)
+	{
+#if defined(AVAIL_ZLIB) && defined(Q2CLIENT)
+		z_stream s;
+		unsigned short clen = size;
+		unsigned short ulen = MSG_ReadShort();
+		char cdata[8192];
+		unsigned int done = 0;
+		memset(&s, 0, sizeof(s));
+		s.next_in = net_message.data + MSG_GetReadCount();
+		s.avail_in = clen;
+		if (inflateInit2(&s, -15) != Z_OK)
+			Host_EndGame ("CL_ParseZDownload: unable to initialise zlib");
+		for(;;)
+		{
+			int zerr;
+			s.next_out = cdata;
+			s.avail_out = sizeof(cdata);
+			zerr = inflate(&s, Z_FULL_FLUSH);
+			VFS_WRITE (dl->file, cdata, s.total_out - done);
+			done = s.total_out;
+			if (zerr == Z_STREAM_END)
+				break;
+			else if (zerr == Z_OK)
+				continue;
+			else
+				Host_EndGame ("CL_ParseZDownload: stream truncated");
+		}
+		if (inflateEnd(&s) != Z_OK)
+			Host_EndGame ("CL_ParseZDownload: stream truncated");
+		VFS_WRITE (dl->file, cdata, s.total_out - done);
+		done = s.total_out;
+		if (s.total_out != ulen || s.total_in != clen)
+			Host_EndGame ("CL_ParseZDownload: stream truncated");
+
+#else
+		plugfuncs->EndGame("Unable to handle zlib downloads, zlib is not supported in this build");
+#endif
+		Imsgfuncs->ReadSkip(size);
+	}
+	else
+#ifdef PEXT_ZLIBDL
+	if (percent >= 101 && percent <= 201)// && cls.fteprotocolextensions & PEXT_ZLIBDL)
+	{
+		int compsize;
+
+		percent = percent - 101;
+
+		VFS_WRITE (cls.download, ZLibDownloadDecode(&compsize, net_message.data + MSG_GetReadCount(), size), size);
+
+		Imsgfuncs->ReadSkip(compsize);
+	}
+	else
+#endif
+	{
+		VFS_WRITE (dl->file, net_message.data + MSG_GetReadCount(), size);
+		Imsgfuncs->ReadSkip(size);
+	}
+
+	dl->completedbytes += size;
+	dl->ratebytes += size;
+	if (dl->percent != percent)	//try and guess the size (its most acurate when the percent value changes)
+		dl->size = ((float)dl->completedbytes*100)/percent;
+
+	if (percent != 100 && size == 0 && cl_dlemptyterminate.ival)
+	{
+		Con_Printf(CON_WARNING "WARNING: Client received empty svc_download, assuming EOF.\n");
+		percent = 100;
+	}
+
+	if (percent != 100)
+	{
+		// request next block
+		dl->percent = percent;
+
+		CL_SendClientCommand(true, "nextdl");
+	}
+	else
+	{
+		Con_DPrintf("Download took %i seconds\n", (int)(Sys_DoubleTime() - dl->starttime));
+
+		CL_DownloadFinished(dl);
+
+		// get another file if needed
+
+		CL_RequestNextDownload ();
+	}
+}
+
+
+#ifdef Q2CLIENT
+static void CLQ2_ParseClientinfo(int i, char *s)
+{
+	char *model, *name;
+	player_info_t *player;
+	//s contains "name\model/skin"
+	//q2 doesn't really do much with userinfos.
+
+	if (i >= MAX_CLIENTS)
+		return;
+
+	player = &cl.players[i];
+
+	InfoBuf_Clear(&player->userinfo, true);
+	cl.players[i].userinfovalid = true;
+
+	model = strchr(s, '\\');
+	if (model)
+	{
+		*model = '\0';
+		model++;
+		name = s;
+	}
+	else
+	{
+		name = "Unnammed";
+		model = "male";
+	}
+#if 0
+	skin = strchr(model, '/');
+	if (skin)
+	{
+		*skin = '\0';
+		skin++;
+	}
+	else
+		skin = "";
+	InfoBuf_SetValueForKey(&player->userinfo, "model", model);
+	InfoBuf_SetValueForKey(&player->userinfo, "skin", skin);
+#else
+	InfoBuf_SetValueForKey(&player->userinfo, "skin", model);
+#endif
+	InfoBuf_SetValueForKey(&player->userinfo, "name", name);
+
+	cl.players[i].userid = i;
+	cl.players[i].rbottomcolor = 1;
+	cl.players[i].rtopcolor = 1;
+	TEMP_CLQ2_ProcessUserInfo (i, player);
+}
+
+static void CLQ2_ParseConfigString (void)
+{
+	unsigned int		i;
+	char	*s;
+//	char	olds[MAX_QPATH];
+
+	i = (unsigned short)MSG_ReadShort ();
+	s = MSG_ReadString();
+
+	if (i >= 0x8000 && i < 0x8000+MAX_PRECACHE_MODELS)
+	{
+		if (*s == '/')
+			s++;	//*sigh*
+		Q_strncpyz(cl.model_name[i-0x8000], s, MAX_QPATH);
+		if (cl.model_name[i-0x8000][0] == '#')
+		{
+			if (cl.numq2visibleweapons < Q2MAX_VISIBLE_WEAPONS)
+			{
+				cl.q2visibleweapons[cl.numq2visibleweapons] = cl.model_name[i-0x8000]+1;
+				cl.numq2visibleweapons++;
+			}
+			cl.model_precache[i-0x8000] = NULL;
+		}
+		else if (cl.contentstage)
+			cl.model_precache[i-0x8000] = Mod_ForName (cl.model_name[i-0x8000], MLV_WARN);
+		return;
+	}
+	else if (i >= 0xc000 && i < 0xc000+MAX_PRECACHE_SOUNDS)
+	{
+		if (*s == '/')
+			s++;	//*sigh*
+		Q_strncpyz(cl.sound_name[i-0xc000], s, MAX_QPATH);
+		if (cl.contentstage)
+			cl.sound_precache[i-0xc000] = S_PrecacheSound (s);
+		return;
+	}
+
+	if ((unsigned int)i >= Q2MAX_CONFIGSTRINGS)
+		plugfuncs->EndGame ("configstring > Q2MAX_CONFIGSTRINGS");
+
+//	strncpy (olds, cl.configstrings[i], sizeof(olds));
+//	olds[sizeof(olds) - 1] = 0;
+
+//	strcpy (cl.configstrings[i], s);
+
+	// do something apropriate
+
+	if (i == Q2CS_NAME)
+	{
+		Q_strncpyz (cl.levelname, s, sizeof(cl.levelname));
+	}
+	else if (i == Q2CS_SKY)
+		R_SetSky(s);
+	else if (i == Q2CS_SKYAXIS || i == Q2CS_SKYROTATE)
+	{
+		if (i == Q2CS_SKYROTATE)
+			cl.skyrotate = atof(s);
+		else
+		{
+			s = COM_Parse(s);
+			if (s)
+			{
+				cl.skyaxis[0] = atof(com_token);
+				s = COM_Parse(s);
+				if (s)
+				{
+					cl.skyaxis[1] = atof(com_token);
+					s = COM_Parse(s);
+					if (s)
+						cl.skyaxis[2] = atof(com_token);
+				}
+			}
+		}
+
+		if (cl.skyrotate)
+		{
+			if (cl.skyaxis[0]||cl.skyaxis[1]||cl.skyaxis[2])
+				Cvar_Set(&r_skybox_orientation, va("%g %g %g %g", cl.skyaxis[0], cl.skyaxis[1], cl.skyaxis[2], cl.skyrotate));
+			else
+				Cvar_Set(&r_skybox_orientation, va("0 0 1 %g", cl.skyrotate));
+		}
+		else
+			Cvar_Set(&r_skybox_orientation, "");
+	}
+	else if (i == Q2CS_STATUSBAR)
+	{
+		Q_strncpyz(cl.q2statusbar, s, sizeof(cl.q2statusbar));
+	}
+	else if (i >= Q2CS_LIGHTS && i < Q2CS_LIGHTS+Q2MAX_LIGHTSTYLES)
+	{
+		R_UpdateLightStyle(i-Q2CS_LIGHTS, s, 1, 1, 1);
+	}
+	else if (i == Q2CS_CDTRACK)
+	{
+		Media_NamedTrack (s, NULL);
+	}
+	else if (i == Q2CS_AIRACCEL)
+		Q_strncpyz(cl.q2airaccel, s, sizeof(cl.q2airaccel));
+	else if (i >= Q2CS_MODELS && i < Q2CS_MODELS+Q2MAX_MODELS)
+	{
+		if (*s == '/')
+			s++;	//*sigh*
+		Q_strncpyz(cl.model_name[i-Q2CS_MODELS], s, MAX_QPATH);
+		if (cl.model_name[i-Q2CS_MODELS][0] == '#')
+		{
+			if (cl.numq2visibleweapons < Q2MAX_VISIBLE_WEAPONS)
+			{
+				cl.q2visibleweapons[cl.numq2visibleweapons] = cl.model_name[i-Q2CS_MODELS]+1;
+				cl.numq2visibleweapons++;
+			}
+			cl.model_precache[i-Q2CS_MODELS] = NULL;
+		}
+		else if (cl.contentstage)
+			cl.model_precache[i-Q2CS_MODELS] = Mod_ForName (cl.model_name[i-Q2CS_MODELS], MLV_WARN);
+	}
+	else if (i >= Q2CS_SOUNDS && i < Q2CS_SOUNDS+Q2MAX_SOUNDS)
+	{
+		if (*s == '/')
+			s++;	//*sigh*
+		Q_strncpyz(cl.sound_name[i-Q2CS_SOUNDS], s, MAX_QPATH);
+		if (cl.contentstage)
+			cl.sound_precache[i-Q2CS_SOUNDS] = S_PrecacheSound (s);
+	}
+	else if (i >= Q2CS_IMAGES && i < Q2CS_IMAGES+Q2MAX_IMAGES)
+	{
+		Z_Free(cl.image_name[i-Q2CS_IMAGES]);
+		cl.image_name[i-Q2CS_IMAGES] = Z_StrDup(s);
+	}
+	else if (i >= Q2CS_ITEMS && i < Q2CS_ITEMS+Q2MAX_ITEMS)
+	{
+		Z_Free(cl.item_name[i-Q2CS_ITEMS]);
+		cl.item_name[i-Q2CS_ITEMS] = Z_StrDup(s);
+	}
+	else if (i >= Q2CS_GENERAL && i < Q2CS_GENERAL+Q2MAX_GENERAL)
+	{
+		Z_Free(cl.configstring_general[i-Q2CS_PLAYERSKINS]);
+		cl.configstring_general[i-Q2CS_PLAYERSKINS] = Z_StrDup(s);
+	}
+	else if (i >= Q2CS_PLAYERSKINS && i < Q2CS_PLAYERSKINS+Q2MAX_CLIENTS)
+	{
+		CLQ2_ParseClientinfo (i-Q2CS_PLAYERSKINS, s);
+		Z_Free(cl.configstring_general[i-Q2CS_PLAYERSKINS]);
+		cl.configstring_general[i-Q2CS_PLAYERSKINS] = Z_StrDup(s);
+	}
+	else if (i == Q2CS_MAPCHECKSUM)
+	{
+		int serverchecksum = (int)strtol(s, NULL, 10);
+		int mapchecksum = 0;
+		if (cl.worldmodel)
+		{
+			if (cl.worldmodel->loadstate == MLS_LOADING)
+				COM_WorkerPartialSync(cl.worldmodel, &cl.worldmodel->loadstate, MLS_LOADING);
+			mapchecksum = cl.worldmodel->checksum;
+
+			// the Q2 client normally exits here, however for our purposes we might as well ignore it
+			if (mapchecksum != serverchecksum)
+				Con_Printf(CON_WARNING "WARNING: Client checksum does not match server checksum (%i != %i)", mapchecksum, serverchecksum);
+		}
+
+		cl.q2mapchecksum = serverchecksum;
+	}
+}
+#endif
+
+#ifdef Q2CLIENT
+static void CLQ2_Precache_f (void)
+{
+	TEMPQ2_Model_CheckDownloads();
+	TEMPQ2_Sound_CheckDownloads();
+
+	cl.contentstage = 0;
+	cl.sendprespawn = true;
+	SCR_SetLoadingFile("loading data");
+}
+#endif
+
+
+
 #ifdef Q2CLIENT
 static void CLQ2_ParseServerData (void)
 {
@@ -312,6 +717,7 @@ static void CLQ2_ParseStartSoundPacket(void)
 		}
 		else
 		{
+			//readpos
 			pos_v[0] = Imsgfuncs->ReadCoord();
 			pos_v[1] = Imsgfuncs->ReadCoord();
 			pos_v[2] = Imsgfuncs->ReadCoord();
@@ -379,7 +785,6 @@ void CLQ2_ParseServerMessage (void)
 		Con_Printf ("%i ",net_message.cursize);
 	else if (cl_shownet.value >= 2)
 		Con_Printf ("------------------\n");
-
 
 	CL_ParseClientdata ();
 
@@ -482,14 +887,15 @@ isilegible:
 			i = Imsgfuncs->ReadByte ();
 			s = Imsgfuncs->ReadString ();
 
-			//TODO(fhomolka): CL_ParsePrint(s, i);
+			//TODO(fhomolka): 
+			TEMP_CLQ2_ParsePrint(s, i);
 			break;
 		case svcq2_stufftext:	//11			// [string] stuffed into client's console buffer, should be \n terminated
 			s = Imsgfuncs->ReadString ();
 			Con_DPrintf ("stufftext: %s\n", s);
 			if (!strncmp(s, "precache", 8))	//big major hack. Q2 uses a command that q1 has as a cvar.
 			{	//call the q2 precache function.
-				//TODO(fhomolka): CLQ2_Precache_f();
+				CLQ2_Precache_f();
 			}
 			else
 				Cbuf_AddText (s, RESTRICT_SERVER);	//don't let the local user cheat
@@ -499,7 +905,7 @@ isilegible:
 			CLQ2_ParseServerData ();
 			break;
 		case svcq2_configstring:	//13		// [short] [string]
-			//TODO(fhomolka): CLQ2_ParseConfigString();
+			CLQ2_ParseConfigString();
 			break;
 		case svcq2_spawnbaseline://14
 			CLQ2_ParseBaseline();
@@ -513,7 +919,7 @@ isilegible:
 				SCR_CenterPrint (seat, s, false);
 			break;
 		case svcq2_download:		//16		// [short] size [size bytes]
-			//TODO CL_ParseDownload(false);
+			CLQ2_ParseDownload(false);
 			break;
 		case svcq2_playerinfo:	//17			// variable
 			plugfuncs->EndGame ("CL_ParseServerMessage: svcq2_playerinfo not as part of svcq2_frame");
@@ -537,7 +943,7 @@ isilegible:
 		case svcr1q2_zdownload:
 			if (cls.protocol_q2 == PROTOCOL_VERSION_R1Q2 || cls.protocol_q2 == PROTOCOL_VERSION_Q2PRO)
 				{
-					//TODO CL_ParseDownload(true);
+					CLQ2_ParseDownload(true);
 				}
 			else
 				goto isilegible;
@@ -559,9 +965,9 @@ isilegible:
 	CL_SetSolidEntities ();
 
 //TODO(fhomolka):
-/*
+
 	if (cls.demohadkeyframe)
 		CL_WriteDemoMessage(&net_message, startpos);	//FIXME: incomplete frames might be awkward
-*/
+
 }
 #endif 
